@@ -4,25 +4,28 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when validating an introspection request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ValidateIntrospectionRequest"/> event.
     /// </summary>
-    public class ValidateIntrospectionRequestContext : BaseValidatingClientContext {
+    public class ValidateIntrospectionRequestContext : BaseValidatingClientContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ValidateIntrospectionRequestContext"/> class.
+        /// Creates a new instance of the <see cref="ValidateIntrospectionRequestContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
         public ValidateIntrospectionRequestContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options, request) {
+            : base(context, scheme, options, request)
+        {
         }
 
         /// <summary>

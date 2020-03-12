@@ -6,56 +6,39 @@
 
 using System.Collections.Generic;
 using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when issuing an authorization code.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.SerializeAuthorizationCode"/> event.
     /// </summary>
-    public class SerializeAuthorizationCodeContext : BaseControlContext {
+    public class SerializeAuthorizationCodeContext : BaseSerializingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="SerializeAuthorizationCodeContext"/> class
+        /// Creates a new instance of the <see cref="SerializeAuthorizationCodeContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="response"></param>
-        /// <param name="ticket"></param>
         public SerializeAuthorizationCodeContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response,
             AuthenticationTicket ticket)
-            : base(context) {
-            Options = options;
-            Request = request;
-            Response = response;
-            Ticket = ticket;
+            : base(context, scheme, options, request, response, ticket)
+        {
         }
-
-        /// <summary>
-        /// Gets the options used by the OpenID Connect server.
-        /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
-        /// Gets the authorization request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets the authorization response.
-        /// </summary>
-        public new OpenIdConnectResponse Response { get; }
 
         /// <summary>
         /// Gets or sets the presenters associated with the authentication ticket.
         /// </summary>
-        public IEnumerable<string> Presenters {
-            get { return Ticket.GetPresenters(); }
-            set { Ticket.SetPresenters(value); }
+        public IEnumerable<string> Presenters
+        {
+            get => Ticket.GetPresenters();
+            set => Ticket.SetPresenters(value);
         }
 
         /// <summary>

@@ -4,42 +4,31 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when receiving an authorization code.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.DeserializeAuthorizationCode"/> event.
     /// </summary>
-    public class DeserializeAuthorizationCodeContext : BaseControlContext {
+    public class DeserializeAuthorizationCodeContext : BaseDeserializingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="DeserializeAuthorizationCodeContext"/> class
+        /// Creates a new instance of the <see cref="DeserializeAuthorizationCodeContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="code"></param>
         public DeserializeAuthorizationCodeContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             string code)
-            : base(context) {
-            Options = options;
-            Request = request;
+            : base(context, scheme, options, request)
+        {
             AuthorizationCode = code;
         }
-
-        /// <summary>
-        /// Gets the options used by the OpenID Connect server.
-        /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
-        /// Gets the authorization request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
         /// Gets or sets the data format used to deserialize the authentication ticket.

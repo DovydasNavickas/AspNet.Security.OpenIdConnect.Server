@@ -4,42 +4,44 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server starts
-    /// writing the JWKS metadata to the response stream.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyCryptographyResponse"/> event.
     /// </summary>
-    public class ApplyCryptographyResponseContext : BaseControlContext {
+    public class ApplyCryptographyResponseContext : HandleRequestContext<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="ApplyCryptographyResponseContext"/> class.
         /// </summary>
         public ApplyCryptographyResponseContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context) {
-            Options = options;
+            : base(context, scheme, options)
+        {
             Request = request;
             Response = response;
         }
 
         /// <summary>
-        /// Gets the options used by the OpenID Connect server.
-        /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
         /// Gets the cryptography request.
         /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the cryptography request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets the response returned to the client application.
+        /// Gets the cryptography response.
         /// </summary>
         public new OpenIdConnectResponse Response { get; }
 

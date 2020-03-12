@@ -4,132 +4,127 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using System;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security.Notifications;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Base class used for certain event contexts.
+    /// Represents an abstract base class used for certain event contexts.
     /// </summary>
-    public abstract class BaseValidatingContext : BaseNotification<OpenIdConnectServerOptions> {
+    public abstract class BaseValidatingContext : BaseNotification<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Initializes base class used for certain event contexts.
+        /// Creates a new instance of the <see cref="BaseValidatingContext"/> class.
         /// </summary>
         protected BaseValidatingContext(
             IOwinContext context,
-            OpenIdConnectServerOptions options)
-            : base(context, options) {
-            IsRejected = true;
+            OpenIdConnectServerOptions options,
+            OpenIdConnectRequest request)
+            : base(context, options)
+        {
+            Request = request;
         }
 
         /// <summary>
-        /// Gets whether the <see cref="Skip()"/>
-        /// method has been called or not.
+        /// Gets the OpenID Connect request.
         /// </summary>
-        public bool IsSkipped { get; private set; }
+        public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets whether the <see cref="Validate()"/>
-        /// method has been called or not.
+        /// Gets the OpenID Connect response.
         /// </summary>
-        public bool IsValidated { get; private set; }
+        public new OpenIdConnectResponse Response
+        {
+            get => throw new InvalidOperationException("The OpenID Connect response is not available at this stage.");
+        }
 
         /// <summary>
-        /// Gets whether the <see cref="Reject()"/>
-        /// method has been called or not.
+        /// Gets a boolean indicating whether the
+        /// <see cref="Validate()"/> method was called.
         /// </summary>
-        public bool IsRejected { get; private set; }
+        public bool IsValidated { get; protected set; }
 
         /// <summary>
-        /// The error argument provided when <see cref="Reject()"/> was called on this context.
-        /// This is eventually returned to the client app as the OAuth2 "error" parameter.
+        /// Gets a boolean indicating whether the
+        /// <see cref="Reject()"/> method was called.
+        /// </summary>
+        public bool IsRejected { get; protected set; } = true;
+
+        /// <summary>
+        /// Gets or sets the "error" parameter returned to the client application.
         /// </summary>
         public string Error { get; private set; }
 
         /// <summary>
-        /// The optional description argument provided when <see cref="Reject()"/> was called on this context.
-        /// This is eventually returned to the client app as the OAuth2 "error_description" parameter.
+        /// Gets or sets the "error_description" parameter returned to the client application.
         /// </summary>
         public string ErrorDescription { get; private set; }
 
         /// <summary>
-        /// The optional uri argument provided when <see cref="Reject()"/> was called on this context.
-        /// This is eventually returned to the client app as the OpenIdConnect "error_uri" parameter.
+        /// Gets or sets the "error_uri" parameter returned to the client application.
         /// </summary>
         public string ErrorUri { get; private set; }
 
         /// <summary>
-        /// Marks the context as skipped by the application.
+        /// Validates the request.
         /// </summary>
-        /// <returns></returns>
-        public virtual bool Skip() {
-            IsSkipped = true;
-            IsRejected = false;
-            IsValidated = false;
-
-            return true;
-        }
-
-        /// <summary>
-        /// Marks this context as validated by the application.
-        /// </summary>
-        /// <returns>True if the validation has taken effect.</returns>
-        public virtual bool Validate() {
-            IsSkipped = false;
+        public virtual void Validate()
+        {
+            State = NotificationResultState.Continue;
             IsValidated = true;
             IsRejected = false;
-
-            return true;
         }
 
         /// <summary>
-        /// Marks this context as not validated by the application.
+        /// Rejects the request.
         /// </summary>
-        public virtual bool Reject() {
-            IsSkipped = false;
+        public virtual void Reject()
+        {
+            State = NotificationResultState.Continue;
             IsRejected = true;
             IsValidated = false;
-
-            return true;
         }
 
         /// <summary>
-        /// Marks this context as not validated by the application
-        /// and assigns various error information properties.
+        /// Rejects the request.
         /// </summary>
-        /// <param name="error">Assigned to the <see cref="Error"/> property.</param>
-        public virtual bool Reject(string error) {
+        /// <param name="error">The "error" parameter returned to the client application.</param>
+        public virtual void Reject(string error)
+        {
             Error = error;
 
-            return Reject();
+            Reject();
         }
 
         /// <summary>
-        /// Marks this context as not validated by the application
-        /// and assigns various error information properties.
+        /// Rejects the request.
         /// </summary>
-        /// <param name="error">Assigned to the <see cref="Error"/> property.</param>
-        /// <param name="description">Assigned to the <see cref="ErrorDescription"/> property.</param>
-        public virtual bool Reject(string error, string description) {
+        /// <param name="error">The "error" parameter returned to the client application.</param>
+        /// <param name="description">The "error_description" parameter returned to the client application.</param>
+        public virtual void Reject(string error, string description)
+        {
             Error = error;
             ErrorDescription = description;
 
-            return Reject();
+            Reject();
         }
 
         /// <summary>
-        /// Marks this context as not validated by the application
-        /// and assigns various error information properties.
+        /// Rejects the request.
         /// </summary>
-        /// <param name="error">Assigned to the <see cref="Error"/> property</param>
-        /// <param name="description">Assigned to the <see cref="ErrorDescription"/> property</param>
-        /// <param name="uri">Assigned to the <see cref="ErrorUri"/> property</param>
-        public virtual bool Reject(string error, string description, string uri) {
+        /// <param name="error">The "error" parameter returned to the client application.</param>
+        /// <param name="description">The "error_description" parameter returned to the client application.</param>
+        /// <param name="uri">The "error_uri" parameter returned to the client application.</param>
+        public virtual void Reject(string error, string description, string uri)
+        {
             Error = error;
             ErrorDescription = description;
             ErrorUri = uri;
 
-            return Reject();
+            Reject();
         }
     }
 }

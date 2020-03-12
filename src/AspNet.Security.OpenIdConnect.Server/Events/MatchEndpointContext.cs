@@ -7,76 +7,79 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when determining the OpenIdConnect flow type based on the request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.MatchEndpoint"/> event.
     /// </summary>
-    public class MatchEndpointContext : BaseControlContext {
+    public class MatchEndpointContext : HandleRequestContext<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="MatchEndpointContext"/> class
+        /// Creates a new instance of the <see cref="MatchEndpointContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
         public MatchEndpointContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options)
-            : base(context) {
-            Options = options;
+            : base(context, scheme, options)
+        {
         }
 
         /// <summary>
-        /// Gets the options used by the OpenID Connect server.
-        /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
-        /// Gets whether or not the endpoint is an
-        /// OAuth2/OpenID Connect authorization endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the authorization endpoint.
         /// </summary>
         public bool IsAuthorizationEndpoint { get; private set; }
 
         /// <summary>
-        /// Gets whether or not the endpoint is an
-        /// OpenID Connect configuration metadata endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the configuration endpoint.
         /// </summary>
         public bool IsConfigurationEndpoint { get; private set; }
 
         /// <summary>
-        /// Gets whether or not the endpoint is an
-        /// OpenID Connect JWKS endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the cryptography endpoint.
         /// </summary>
         public bool IsCryptographyEndpoint { get; private set; }
 
         /// <summary>
-        /// Gets whether or not the endpoint is an introspection endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the introspection endpoint.
         /// </summary>
         public bool IsIntrospectionEndpoint { get; private set; }
 
         /// <summary>
-        /// Gets whether or not the endpoint is a logout endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the logout endpoint.
         /// </summary>
         public bool IsLogoutEndpoint { get; private set; }
 
         /// <summary>
-        /// Gets whether or not the endpoint is a revocation endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the revocation endpoint.
         /// </summary>
         public bool IsRevocationEndpoint { get; private set; }
 
         /// <summary>
-        /// Gets whether or not the endpoint is an
-        /// OAuth2/OpenID Connect token endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the token endpoint.
         /// </summary>
         public bool IsTokenEndpoint { get; private set; }
 
         /// <summary>
-        /// Gets whether or not the endpoint is an userinfo endpoint.
+        /// Gets a boolean indicating whether the request
+        /// should be handled by the userinfo endpoint.
         /// </summary>
         public bool IsUserinfoEndpoint { get; private set; }
 
         /// <summary>
-        /// Sets the endpoint type to the authorization endpoint.
+        /// Indicates that the request should be
+        /// handled by the authorization endpoint.
         /// </summary>
-        public void MatchesAuthorizationEndpoint() {
+        public void MatchAuthorizationEndpoint()
+        {
             IsAuthorizationEndpoint = true;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = false;
@@ -88,9 +91,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to the configuration endpoint.
+        /// Indicates that the request should be
+        /// handled by the configuration endpoint.
         /// </summary>
-        public void MatchesConfigurationEndpoint() {
+        public void MatchConfigurationEndpoint()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = true;
             IsCryptographyEndpoint = false;
@@ -102,9 +107,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to the JWKS endpoint.
+        /// Indicates that the request should be
+        /// handled by the cryptography endpoint.
         /// </summary>
-        public void MatchesCryptographyEndpoint() {
+        public void MatchCryptographyEndpoint()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = true;
@@ -116,9 +123,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to introspection endpoint.
+        /// Indicates that the request should be
+        /// handled by the introspection endpoint.
         /// </summary>
-        public void MatchesIntrospectionEndpoint() {
+        public void MatchIntrospectionEndpoint()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = false;
@@ -130,9 +139,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to logout endpoint.
+        /// Indicates that the request should be
+        /// handled by the logout endpoint.
         /// </summary>
-        public void MatchesLogoutEndpoint() {
+        public void MatchLogoutEndpoint()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = false;
@@ -144,9 +155,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to revocation endpoint.
+        /// Indicates that the request should be
+        /// handled by the revocation endpoint.
         /// </summary>
-        public void MatchesRevocationEndpoint() {
+        public void MatchRevocationEndpoint()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = false;
@@ -158,9 +171,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to token endpoint.
+        /// Indicates that the request should be
+        /// handled by the token endpoint.
         /// </summary>
-        public void MatchesTokenEndpoint() {
+        public void MatchTokenEndpoint()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = false;
@@ -172,9 +187,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to userinfo endpoint.
+        /// Indicates that the request should be
+        /// handled by the userinfo endpoint.
         /// </summary>
-        public void MatchesUserinfoEndpoint() {
+        public void MatchUserinfoEndpoint()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = false;
@@ -186,9 +203,11 @@ namespace AspNet.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Sets the endpoint type to unknown.
+        /// Indicates that the request shouldn't be handled
+        /// by the OpenID Connect server middleware.
         /// </summary>
-        public void MatchesNothing() {
+        public void MatchNothing()
+        {
             IsAuthorizationEndpoint = false;
             IsConfigurationEndpoint = false;
             IsCryptographyEndpoint = false;

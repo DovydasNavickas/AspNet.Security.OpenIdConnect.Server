@@ -5,57 +5,39 @@
  */
 
 using System.Collections.Generic;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security;
-using Microsoft.Owin.Security.Notifications;
 using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when issuing an authorization code.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.SerializeAuthorizationCode"/> event.
     /// </summary>
-    public class SerializeAuthorizationCodeContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class SerializeAuthorizationCodeContext : BaseSerializingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="SerializeAuthorizationCodeContext"/> class
+        /// Creates a new instance of the <see cref="SerializeAuthorizationCodeContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="response"></param>
-        /// <param name="ticket"></param>
         public SerializeAuthorizationCodeContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response,
             AuthenticationTicket ticket)
-            : base(context, options) {
-            Request = request;
-            Response = response;
-            Ticket = ticket;
+            : base(context, options, request, response, ticket)
+        {
         }
-
-        /// <summary>
-        /// Gets the authorization request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets the authorization response.
-        /// </summary>
-        public new OpenIdConnectResponse Response { get; }
-
-        /// <summary>
-        /// Gets the authentication ticket.
-        /// </summary>
-        public AuthenticationTicket Ticket { get; }
 
         /// <summary>
         /// Gets or sets the presenters associated with the authentication ticket.
         /// </summary>
-        public IEnumerable<string> Presenters {
-            get { return Ticket.GetPresenters(); }
-            set { Ticket.SetPresenters(value); }
+        public IEnumerable<string> Presenters
+        {
+            get => Ticket.GetPresenters();
+            set => Ticket.SetPresenters(value);
         }
 
         /// <summary>

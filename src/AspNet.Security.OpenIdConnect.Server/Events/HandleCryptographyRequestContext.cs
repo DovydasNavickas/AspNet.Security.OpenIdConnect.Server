@@ -5,35 +5,34 @@
  */
 
 using System.Collections.Generic;
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.IdentityModel.Tokens;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server handles
-    /// the request made to the JWKS metadata endpoint.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.HandleCryptographyRequest"/> event.
     /// </summary>
-    public class HandleCryptographyRequestContext : BaseValidatingContext {
+    public class HandleCryptographyRequestContext : BaseValidatingContext
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="HandleCryptographyRequestContext"/> class.
         /// </summary>
         public HandleCryptographyRequestContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options) {
-            Request = request;
+            : base(context, scheme, options, request)
+        {
             Validate();
         }
 
         /// <summary>
-        /// Gets the cryptography request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets a list of the JSON Web Keys found by the authorization server.
+        /// Gets the list of JSON Web Keys exposed by the JWKS endpoint.
         /// </summary>
         public IList<JsonWebKey> Keys { get; } = new List<JsonWebKey>();
     }

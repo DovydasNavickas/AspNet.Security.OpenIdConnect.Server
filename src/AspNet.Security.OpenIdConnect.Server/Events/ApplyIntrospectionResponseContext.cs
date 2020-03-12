@@ -4,42 +4,44 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server starts
-    /// writing the token status/metadata to the response stream.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyIntrospectionResponse"/> event.
     /// </summary>
-    public class ApplyIntrospectionResponseContext : BaseControlContext {
+    public class ApplyIntrospectionResponseContext : HandleRequestContext<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="ApplyIntrospectionResponseContext"/> class.
         /// </summary>
         public ApplyIntrospectionResponseContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context) {
-            Options = options;
-            Request = Request;
+            : base(context, scheme, options)
+        {
+            Request = request;
             Response = response;
         }
 
         /// <summary>
-        /// Gets the options used by the OpenID Connect server.
-        /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
         /// Gets the introspection request.
         /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the introspection request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets the response returned to the caller.
+        /// Gets the introspection response.
         /// </summary>
         public new OpenIdConnectResponse Response { get; }
 

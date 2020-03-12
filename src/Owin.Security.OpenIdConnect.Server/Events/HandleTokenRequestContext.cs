@@ -4,35 +4,29 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when processing an OpenIdConnect token request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.HandleTokenRequest"/> event.
     /// </summary>
-    public class HandleTokenRequestContext : BaseValidatingTicketContext {
+    public class HandleTokenRequestContext : BaseValidatingTicketContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="HandleTokenRequestContext"/> class
+        /// Creates a new instance of the <see cref="HandleTokenRequestContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="ticket"></param>
         public HandleTokenRequestContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             AuthenticationTicket ticket)
-            : base(context, options, ticket) {
-            Request = request;
+            : base(context, options, request, ticket)
+        {
             Validate();
         }
-
-        /// <summary>
-        /// Gets the token endpoint request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
     }
 }

@@ -4,25 +4,28 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security.Notifications;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server starts
-    /// writing the revocation response to the response stream.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyRevocationResponse"/> event.
     /// </summary>
-    public class ApplyRevocationResponseContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class ApplyRevocationResponseContext : BaseNotification<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="ApplyRevocationResponseContext"/> class.
         /// </summary>
         public ApplyRevocationResponseContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context, options) {
+            : base(context, options)
+        {
             Request = request;
             Response = response;
         }
@@ -30,10 +33,14 @@ namespace Owin.Security.OpenIdConnect.Server {
         /// <summary>
         /// Gets the revocation request.
         /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the revocation request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets the JSON payload returned to the caller.
+        /// Gets the revocation response.
         /// </summary>
         public new OpenIdConnectResponse Response { get; }
 

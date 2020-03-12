@@ -4,32 +4,29 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when extracting a userinfo request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ExtractUserinfoRequest"/> event.
     /// </summary>
-    public class ExtractUserinfoRequestContext : BaseValidatingContext {
+    public class ExtractUserinfoRequestContext : BaseValidatingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ExtractUserinfoRequestContext"/> class.
+        /// Creates a new instance of the <see cref="ExtractUserinfoRequestContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
         public ExtractUserinfoRequestContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options) {
-            Request = request;
+            : base(context, scheme, options, request)
+        {
             Validate();
         }
-
-        /// <summary>
-        /// Gets the userinfo request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
     }
 }

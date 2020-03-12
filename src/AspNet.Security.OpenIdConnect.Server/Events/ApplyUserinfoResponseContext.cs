@@ -4,45 +4,44 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used at the end of a userinfo request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyUserinfoResponse"/> event.
     /// </summary>
-    public class ApplyUserinfoResponseContext : BaseControlContext {
+    public class ApplyUserinfoResponseContext : HandleRequestContext<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ApplyUserinfoResponseContext"/> class
+        /// Creates a new instance of the <see cref="ApplyUserinfoResponseContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="response"></param>
         public ApplyUserinfoResponseContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context) {
-            Options = options;
+            : base(context, scheme, options)
+        {
             Request = request;
             Response = response;
         }
 
         /// <summary>
-        /// Gets the options used by the OpenID Connect server.
+        /// Gets the userinfo request.
         /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
-        /// Gets the token request.
-        /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the userinfo request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets the response returned to the client application.
+        /// Gets the userinfo response.
         /// </summary>
         public new OpenIdConnectResponse Response { get; }
 

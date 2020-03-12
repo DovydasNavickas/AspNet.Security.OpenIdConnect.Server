@@ -4,34 +4,37 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server handles
-    /// the request made to the token revocation endpoint.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.HandleRevocationRequest"/> event.
     /// </summary>
-    public class HandleRevocationRequestContext : BaseValidatingContext {
+    public class HandleRevocationRequestContext : BaseValidatingContext
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="HandleRevocationRequestContext"/> class.
         /// </summary>
         public HandleRevocationRequestContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             AuthenticationTicket ticket)
-            : base(context, options) {
-            Request = request;
+            : base(context, scheme, options, request)
+        {
             Ticket = ticket;
             Validate();
         }
 
         /// <summary>
-        /// Gets the revocation request.
+        /// Gets the authentication ticket.
         /// </summary>
-        public new OpenIdConnectRequest Request { get; }
+        public AuthenticationTicket Ticket { get; }
 
         /// <summary>
         /// Gets or sets a boolean indicating whether

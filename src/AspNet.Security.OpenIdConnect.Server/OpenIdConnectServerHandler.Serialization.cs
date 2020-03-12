@@ -5,367 +5,361 @@
  */
 
 using System;
-using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
-using System.Xml;
 using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
-namespace AspNet.Security.OpenIdConnect.Server {
-    internal partial class OpenIdConnectServerHandler : AuthenticationHandler<OpenIdConnectServerOptions> {
+namespace AspNet.Security.OpenIdConnect.Server
+{
+    public partial class OpenIdConnectServerHandler
+    {
         private async Task<string> SerializeAuthorizationCodeAsync(
             ClaimsPrincipal principal, AuthenticationProperties properties,
-            OpenIdConnectRequest request, OpenIdConnectResponse response) {
-            // properties.IssuedUtc and properties.ExpiresUtc
-            // should always be preferred when explicitly set.
-            if (properties.IssuedUtc == null) {
-                properties.IssuedUtc = Options.SystemClock.UtcNow;
-            }
-
-            if (properties.ExpiresUtc == null) {
-                properties.ExpiresUtc = properties.IssuedUtc + Options.AuthorizationCodeLifetime;
-            }
-
-            // Claims in authorization codes are never filtered as they are supposed to be opaque:
+            OpenIdConnectRequest request, OpenIdConnectResponse response)
+        {
+            // Note: claims in authorization codes are never filtered as they are supposed to be opaque:
             // SerializeAccessTokenAsync and SerializeIdentityTokenAsync are responsible of ensuring
             // that subsequent access and identity tokens are correctly filtered.
-            var ticket = new AuthenticationTicket(principal, properties, Options.AuthenticationScheme);
-            ticket.SetUsage(OpenIdConnectConstants.Usages.AuthorizationCode);
 
-            // Associate a random identifier with the authorization code.
-            ticket.SetTicketId(Guid.NewGuid().ToString());
+            // Create a new ticket containing the updated properties.
+            var ticket = new AuthenticationTicket(principal, properties, Scheme.Name);
+            ticket.Properties.IssuedUtc = Options.SystemClock.UtcNow;
 
-            // By default, add the client_id to the list of the
-            // presenters allowed to use the authorization code.
-            if (!string.IsNullOrEmpty(request.ClientId)) {
-                ticket.SetPresenters(request.ClientId);
+            // Only set the expiration date if a lifetime was specified in either the ticket or the options.
+            var lifetime = ticket.GetAuthorizationCodeLifetime() ?? Options.AuthorizationCodeLifetime;
+            if (lifetime.HasValue)
+            {
+                ticket.Properties.ExpiresUtc = ticket.Properties.IssuedUtc + lifetime.Value;
             }
 
-            var notification = new SerializeAuthorizationCodeContext(Context, Options, request, response, ticket) {
+            // Associate a random identifier with the authorization code.
+            ticket.SetTokenId(Guid.NewGuid().ToString());
+
+            // Store the code_challenge, code_challenge_method and nonce parameters for later comparison.
+            ticket.SetProperty(OpenIdConnectConstants.Properties.CodeChallenge, request.CodeChallenge)
+                  .SetProperty(OpenIdConnectConstants.Properties.CodeChallengeMethod, request.CodeChallengeMethod)
+                  .SetProperty(OpenIdConnectConstants.Properties.Nonce, request.Nonce);
+
+            // Store the original redirect_uri sent by the client application for later comparison.
+            ticket.SetProperty(OpenIdConnectConstants.Properties.OriginalRedirectUri,
+                request.GetProperty<string>(OpenIdConnectConstants.Properties.OriginalRedirectUri));
+
+            // Remove the unwanted properties from the authentication ticket.
+            ticket.RemoveProperty(OpenIdConnectConstants.Properties.AuthorizationCodeLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.TokenUsage);
+
+            var notification = new SerializeAuthorizationCodeContext(Context, Scheme, Options, request, response, ticket)
+            {
                 DataFormat = Options.AuthorizationCodeFormat
             };
 
-            await Options.Provider.SerializeAuthorizationCode(notification);
+            await Provider.SerializeAuthorizationCode(notification);
 
-            if (notification.HandledResponse || !string.IsNullOrEmpty(notification.AuthorizationCode)) {
+            if (notification.IsHandled || !string.IsNullOrEmpty(notification.AuthorizationCode))
+            {
                 return notification.AuthorizationCode;
             }
 
-            else if (notification.Skipped) {
-                return null;
+            if (notification.DataFormat == null)
+            {
+                throw new InvalidOperationException("A data formatter must be provided.");
             }
 
-            if (!ReferenceEquals(ticket, notification.Ticket)) {
-                throw new InvalidOperationException("The authentication ticket cannot be replaced.");
-            }
+            var result = notification.DataFormat.Protect(ticket);
 
-            if (notification.DataFormat == null) {
-                return null;
-            }
+            Logger.LogTrace("A new authorization code was successfully generated using " +
+                            "the specified data format: {Code} ; {Claims} ; {Properties}.",
+                            result, ticket.Principal.Claims, ticket.Properties.Items);
 
-            return notification.DataFormat.Protect(ticket);
+            return result;
         }
 
         private async Task<string> SerializeAccessTokenAsync(
             ClaimsPrincipal principal, AuthenticationProperties properties,
-            OpenIdConnectRequest request, OpenIdConnectResponse response) {
-            // properties.IssuedUtc and properties.ExpiresUtc
-            // should always be preferred when explicitly set.
-            if (properties.IssuedUtc == null) {
-                properties.IssuedUtc = Options.SystemClock.UtcNow;
-            }
-
-            if (properties.ExpiresUtc == null) {
-                properties.ExpiresUtc = properties.IssuedUtc + Options.AccessTokenLifetime;
-            }
-
+            OpenIdConnectRequest request, OpenIdConnectResponse response)
+        {
             // Create a new principal containing only the filtered claims.
             // Actors identities are also filtered (delegation scenarios).
-            principal = principal.Clone(claim => {
-                // Never exclude ClaimTypes.NameIdentifier.
-                if (string.Equals(claim.Type, ClaimTypes.NameIdentifier, StringComparison.OrdinalIgnoreCase)) {
+            principal = principal.Clone(claim =>
+            {
+                // Never exclude the subject claim.
+                if (string.Equals(claim.Type, OpenIdConnectConstants.Claims.Subject, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
                 }
 
                 // Claims whose destination is not explicitly referenced or doesn't
                 // contain "access_token" are not included in the access token.
-                return claim.HasDestination(OpenIdConnectConstants.Destinations.AccessToken);
+                if (!claim.HasDestination(OpenIdConnectConstants.Destinations.AccessToken))
+                {
+                    Logger.LogDebug("'{Claim}' was excluded from the access token claims.", claim.Type);
+
+                    return false;
+                }
+
+                return true;
             });
+
+            // Remove the destinations from the claim properties.
+            foreach (var claim in principal.Claims)
+            {
+                claim.Properties.Remove(OpenIdConnectConstants.Properties.Destinations);
+            }
 
             var identity = (ClaimsIdentity) principal.Identity;
 
             // Create a new ticket containing the updated properties and the filtered principal.
-            var ticket = new AuthenticationTicket(principal, properties, Options.AuthenticationScheme);
-            ticket.SetUsage(OpenIdConnectConstants.Usages.AccessToken);
-            ticket.SetAudiences(ticket.GetResources());
+            var ticket = new AuthenticationTicket(principal, properties, Scheme.Name);
+            ticket.Properties.IssuedUtc = Options.SystemClock.UtcNow;
 
-            // Associate a random identifier with the access token.
-            ticket.SetTicketId(Guid.NewGuid().ToString());
-
-            // By default, add the client_id to the list of the
-            // presenters allowed to use the access token.
-            if (!string.IsNullOrEmpty(request.ClientId)) {
-                ticket.SetPresenters(request.ClientId);
+            // Only set the expiration date if a lifetime was specified in either the ticket or the options.
+            var lifetime = ticket.GetAccessTokenLifetime() ?? Options.AccessTokenLifetime;
+            if (lifetime.HasValue)
+            {
+                ticket.Properties.ExpiresUtc = ticket.Properties.IssuedUtc + lifetime.Value;
             }
 
-            var notification = new SerializeAccessTokenContext(Context, Options, request, response, ticket) {
+            // Associate a random identifier with the access token.
+            ticket.SetTokenId(Guid.NewGuid().ToString());
+            ticket.SetAudiences(ticket.GetResources());
+
+            // Remove the unwanted properties from the authentication ticket.
+            ticket.RemoveProperty(OpenIdConnectConstants.Properties.AccessTokenLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.AuthorizationCodeLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.CodeChallenge)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.CodeChallengeMethod)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.IdentityTokenLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.Nonce)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.OriginalRedirectUri)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.RefreshTokenLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.TokenUsage);
+
+            var notification = new SerializeAccessTokenContext(Context, Scheme, Options, request, response, ticket)
+            {
                 DataFormat = Options.AccessTokenFormat,
+                EncryptingCredentials = Options.EncryptingCredentials.FirstOrDefault(
+                    credentials => credentials.Key is SymmetricSecurityKey),
                 Issuer = Context.GetIssuer(Options),
                 SecurityTokenHandler = Options.AccessTokenHandler,
-                SigningCredentials = Options.SigningCredentials.FirstOrDefault()
+                SigningCredentials = Options.SigningCredentials.FirstOrDefault(
+                    credentials => credentials.Key is SymmetricSecurityKey) ?? Options.SigningCredentials.FirstOrDefault()
             };
 
-            await Options.Provider.SerializeAccessToken(notification);
+            await Provider.SerializeAccessToken(notification);
 
-            if (notification.HandledResponse || !string.IsNullOrEmpty(notification.AccessToken)) {
+            if (notification.IsHandled || !string.IsNullOrEmpty(notification.AccessToken))
+            {
                 return notification.AccessToken;
             }
 
-            else if (notification.Skipped) {
-                return null;
+            if (notification.SecurityTokenHandler == null)
+            {
+                if (notification.DataFormat == null)
+                {
+                    throw new InvalidOperationException("A security token handler or data formatter must be provided.");
+                }
+
+                var value = notification.DataFormat.Protect(ticket);
+
+                Logger.LogTrace("A new access token was successfully generated using the " +
+                                "specified data format: {Token} ; {Claims} ; {Properties}.",
+                                value, ticket.Principal.Claims, ticket.Properties.Items);
+
+                return value;
             }
 
-            if (!ReferenceEquals(ticket, notification.Ticket)) {
-                throw new InvalidOperationException("The authentication ticket cannot be replaced.");
-            }
-
-            if (!notification.Audiences.Any()) {
-                Logger.LogInformation("No explicit audience was associated with the access token.");
-            }
-
-            if (notification.SecurityTokenHandler == null) {
-                return notification.DataFormat?.Protect(ticket);
-            }
-
-            if (notification.SigningCredentials == null) {
+            // At this stage, throw an exception if no signing credentials were provided.
+            if (notification.SigningCredentials == null)
+            {
                 throw new InvalidOperationException("A signing key must be provided.");
             }
 
             // Extract the main identity from the principal.
             identity = (ClaimsIdentity) ticket.Principal.Identity;
 
-            // Store the "unique_id" property as a claim.
-            identity.AddClaim(notification.SecurityTokenHandler is JwtSecurityTokenHandler ?
-                OpenIdConnectConstants.Claims.JwtId :
-                OpenIdConnectConstants.Claims.TokenId, ticket.GetTicketId());
-
             // Store the "usage" property as a claim.
-            identity.AddClaim(OpenIdConnectConstants.Claims.Usage, ticket.GetUsage());
+            identity.AddClaim(OpenIdConnectConstants.Claims.TokenUsage, OpenIdConnectConstants.TokenUsages.AccessToken);
 
-            // If the ticket is marked as confidential, add a new
-            // "confidential" claim in the security token.
-            if (ticket.IsConfidential()) {
-                identity.AddClaim(new Claim(OpenIdConnectConstants.Claims.Confidential, "true", ClaimValueTypes.Boolean));
+            // Store the "unique_id" property as a claim.
+            identity.AddClaim(OpenIdConnectConstants.Claims.JwtId, ticket.GetTokenId());
+
+            // Store the "confidentiality_level" property as a claim.
+            var confidentiality = ticket.GetProperty(OpenIdConnectConstants.Properties.ConfidentialityLevel);
+            if (!string.IsNullOrEmpty(confidentiality))
+            {
+                identity.AddClaim(OpenIdConnectConstants.Claims.ConfidentialityLevel, confidentiality);
             }
 
             // Create a new claim per scope item, that will result
             // in a "scope" array being added in the access token.
-            foreach (var scope in notification.Scopes) {
+            foreach (var scope in notification.Scopes)
+            {
                 identity.AddClaim(OpenIdConnectConstants.Claims.Scope, scope);
             }
 
-            var handler = notification.SecurityTokenHandler as JwtSecurityTokenHandler;
-            if (handler != null) {
-                // Note: when used as an access token, a JWT token doesn't have to expose a "sub" claim
-                // but the name identifier claim is used as a substitute when it has been explicitly added.
-                // See https://tools.ietf.org/html/rfc7519#section-4.1.2
-                var subject = identity.FindFirst(OpenIdConnectConstants.Claims.Subject);
-                if (subject == null) {
-                    var identifier = identity.FindFirst(ClaimTypes.NameIdentifier);
-                    if (identifier != null) {
-                        identity.AddClaim(OpenIdConnectConstants.Claims.Subject, identifier.Value);
-                    }
-                }
-
-                // Remove the ClaimTypes.NameIdentifier claims to avoid getting duplicate claims.
-                // Note: the "sub" claim is automatically mapped by JwtSecurityTokenHandler
-                // to ClaimTypes.NameIdentifier when validating a JWT token.
-                // Note: make sure to call ToArray() to avoid an InvalidOperationException
-                // on old versions of Mono, where FindAll() is implemented using an iterator.
-                foreach (var claim in identity.FindAll(ClaimTypes.NameIdentifier).ToArray()) {
-                    identity.RemoveClaim(claim);
-                }
-
-                // Store the audiences as claims.
-                foreach (var audience in notification.Audiences) {
-                    identity.AddClaim(OpenIdConnectConstants.Claims.Audience, audience);
-                }
-
-                // Extract the presenters from the authentication ticket.
-                var presenters = notification.Presenters.ToArray();
-                switch (presenters.Length) {
-                    case 0: break;
-
-                    case 1:
-                        identity.AddClaim(OpenIdConnectConstants.Claims.AuthorizedParty, presenters[0]);
-                        break;
-
-                    default:
-                        Logger.LogWarning("Multiple presenters have been associated with the access token " +
-                                          "but the JWT format only accepts single values.");
-
-                        // Only add the first authorized party.
-                        identity.AddClaim(OpenIdConnectConstants.Claims.AuthorizedParty, presenters[0]);
-                        break;
-                }
-
-                var token = handler.CreateJwtSecurityToken(
-                    subject: identity,
-                    issuer: notification.Issuer,
-                    signingCredentials: notification.SigningCredentials,
-                    issuedAt: ticket.Properties.IssuedUtc.Value.UtcDateTime,
-                    notBefore: ticket.Properties.IssuedUtc.Value.UtcDateTime,
-                    expires: ticket.Properties.ExpiresUtc.Value.UtcDateTime);
-
-                var x509SecurityKey = notification.SigningCredentials.Key as X509SecurityKey;
-                if (x509SecurityKey != null) {
-                    // Note: unlike "kid", "x5t" is not automatically added by JwtHeader's constructor in IdentityModel for .NET Core.
-                    // Though not required by the specifications, this property is needed for IdentityModel for Katana to work correctly.
-                    // See https://github.com/aspnet-contrib/AspNet.Security.OpenIdConnect.Server/issues/132
-                    // and https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet/issues/181.
-                    token.Header[JwtHeaderParameterNames.X5t] = Base64UrlEncoder.Encode(x509SecurityKey.Certificate.GetCertHash());
-                }
-
-                return handler.WriteToken(token);
+            // Store the audiences as claims.
+            foreach (var audience in notification.Audiences)
+            {
+                identity.AddClaim(OpenIdConnectConstants.Claims.Audience, audience);
             }
 
-            else {
-                var token = notification.SecurityTokenHandler.CreateToken(new SecurityTokenDescriptor {
-                    Subject = identity,
-                    Issuer = notification.Issuer,
-                    Audience = notification.Audiences.ElementAtOrDefault(0),
-                    SigningCredentials = notification.SigningCredentials,
-                    IssuedAt = notification.Ticket.Properties.IssuedUtc.Value.UtcDateTime,
-                    NotBefore = notification.Ticket.Properties.IssuedUtc.Value.UtcDateTime,
-                    Expires = notification.Ticket.Properties.ExpiresUtc.Value.UtcDateTime
-                });
+            // Extract the presenters from the authentication ticket.
+            var presenters = notification.Presenters.ToArray();
+            switch (presenters.Length)
+            {
+                case 0: break;
 
-                // Note: the security token is manually serialized to prevent
-                // an exception from being thrown if the handler doesn't implement
-                // the SecurityTokenHandler.WriteToken overload returning a string.
-                var builder = new StringBuilder();
-                using (var writer = XmlWriter.Create(builder, new XmlWriterSettings {
-                    Encoding = new UTF8Encoding(false), OmitXmlDeclaration = true })) {
-                    notification.SecurityTokenHandler.WriteToken(writer, token);
-                }
+                case 1:
+                    identity.AddClaim(OpenIdConnectConstants.Claims.AuthorizedParty, presenters[0]);
+                    break;
 
-                return builder.ToString();
+                default:
+                    Logger.LogWarning("Multiple presenters have been associated with the access token " +
+                                      "but the JWT format only accepts single values.");
+
+                    // Only add the first authorized party.
+                    identity.AddClaim(OpenIdConnectConstants.Claims.AuthorizedParty, presenters[0]);
+                    break;
             }
+
+            var token = notification.SecurityTokenHandler.CreateEncodedJwt(new SecurityTokenDescriptor
+            {
+                Subject = identity,
+                Issuer = notification.Issuer,
+                EncryptingCredentials = notification.EncryptingCredentials,
+                SigningCredentials = notification.SigningCredentials,
+                IssuedAt = notification.Ticket.Properties.IssuedUtc?.UtcDateTime,
+                NotBefore = notification.Ticket.Properties.IssuedUtc?.UtcDateTime,
+                Expires = notification.Ticket.Properties.ExpiresUtc?.UtcDateTime
+            });
+
+            Logger.LogTrace("A new access token was successfully generated using the specified " +
+                            "security token handler: {Token} ; {Claims} ; {Properties}.",
+                            token, ticket.Principal.Claims, ticket.Properties.Items);
+
+            return token;
         }
 
         private async Task<string> SerializeIdentityTokenAsync(
             ClaimsPrincipal principal, AuthenticationProperties properties,
-            OpenIdConnectRequest request, OpenIdConnectResponse response) {
-            // properties.IssuedUtc and properties.ExpiresUtc
-            // should always be preferred when explicitly set.
-            if (properties.IssuedUtc == null) {
-                properties.IssuedUtc = Options.SystemClock.UtcNow;
-            }
-
-            if (properties.ExpiresUtc == null) {
-                properties.ExpiresUtc = properties.IssuedUtc + Options.IdentityTokenLifetime;
-            }
-
+            OpenIdConnectRequest request, OpenIdConnectResponse response)
+        {
             // Replace the principal by a new one containing only the filtered claims.
             // Actors identities are also filtered (delegation scenarios).
-            principal = principal.Clone(claim => {
-                // Never exclude ClaimTypes.NameIdentifier.
-                if (string.Equals(claim.Type, ClaimTypes.NameIdentifier, StringComparison.OrdinalIgnoreCase)) {
+            principal = principal.Clone(claim =>
+            {
+                // Never exclude the subject claim.
+                if (string.Equals(claim.Type, OpenIdConnectConstants.Claims.Subject, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
                 }
 
                 // Claims whose destination is not explicitly referenced or doesn't
                 // contain "id_token" are not included in the identity token.
-                return claim.HasDestination(OpenIdConnectConstants.Destinations.IdentityToken);
+                if (!claim.HasDestination(OpenIdConnectConstants.Destinations.IdentityToken))
+                {
+                    Logger.LogDebug("'{Claim}' was excluded from the identity token claims.", claim.Type);
+
+                    return false;
+                }
+
+                return true;
             });
+
+            // Remove the destinations from the claim properties.
+            foreach (var claim in principal.Claims)
+            {
+                claim.Properties.Remove(OpenIdConnectConstants.Properties.Destinations);
+            }
 
             var identity = (ClaimsIdentity) principal.Identity;
 
             // Create a new ticket containing the updated properties and the filtered principal.
-            var ticket = new AuthenticationTicket(principal, properties, Options.AuthenticationScheme);
-            ticket.SetUsage(OpenIdConnectConstants.Usages.IdentityToken);
+            var ticket = new AuthenticationTicket(principal, properties, Scheme.Name);
+            ticket.Properties.IssuedUtc = Options.SystemClock.UtcNow;
 
-            // Associate a random identifier with the identity token.
-            ticket.SetTicketId(Guid.NewGuid().ToString());
-
-            // By default, add the client_id to the list of the
-            // presenters allowed to use the identity token.
-            if (!string.IsNullOrEmpty(request.ClientId)) {
-                ticket.SetAudiences(request.ClientId);
-                ticket.SetPresenters(request.ClientId);
+            // Only set the expiration date if a lifetime was specified in either the ticket or the options.
+            var lifetime = ticket.GetIdentityTokenLifetime() ?? Options.IdentityTokenLifetime;
+            if (lifetime.HasValue)
+            {
+                ticket.Properties.ExpiresUtc = ticket.Properties.IssuedUtc + lifetime.Value;
             }
 
-            var notification = new SerializeIdentityTokenContext(Context, Options, request, response, ticket) {
+            // Associate a random identifier with the identity token.
+            ticket.SetTokenId(Guid.NewGuid().ToString());
+
+            // Remove the unwanted properties from the authentication ticket.
+            ticket.RemoveProperty(OpenIdConnectConstants.Properties.AccessTokenLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.AuthorizationCodeLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.CodeChallenge)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.CodeChallengeMethod)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.IdentityTokenLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.OriginalRedirectUri)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.RefreshTokenLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.TokenUsage);
+
+            ticket.SetAudiences(ticket.GetPresenters());
+
+            var notification = new SerializeIdentityTokenContext(Context, Scheme, Options, request, response, ticket)
+            {
                 Issuer = Context.GetIssuer(Options),
                 SecurityTokenHandler = Options.IdentityTokenHandler,
-                SigningCredentials = Options.SigningCredentials.FirstOrDefault()
+                SigningCredentials = Options.SigningCredentials.FirstOrDefault(
+                    credentials => credentials.Key is AsymmetricSecurityKey)
             };
 
-            await Options.Provider.SerializeIdentityToken(notification);
+            await Provider.SerializeIdentityToken(notification);
 
-            if (notification.HandledResponse || !string.IsNullOrEmpty(notification.IdentityToken)) {
+            if (notification.IsHandled || !string.IsNullOrEmpty(notification.IdentityToken))
+            {
                 return notification.IdentityToken;
             }
 
-            else if (notification.Skipped) {
-                return null;
-            }
-
-            if (!ReferenceEquals(ticket, notification.Ticket)) {
-                throw new InvalidOperationException("The authentication ticket cannot be replaced.");
-            }
-
-            if (notification.SecurityTokenHandler == null) {
-                return null;
-            }
-
-            if (!identity.HasClaim(claim => claim.Type == OpenIdConnectConstants.Claims.Subject) &&
-                !identity.HasClaim(claim => claim.Type == ClaimTypes.NameIdentifier)) {
-                throw new InvalidOperationException("A unique identifier cannot be found to generate a 'sub' claim: " +
-                                                    "make sure to add a 'ClaimTypes.NameIdentifier' claim.");
-            }
-
-            if (notification.SigningCredentials == null) {
-                throw new InvalidOperationException("A signing key must be provided.");
+            if (notification.SecurityTokenHandler == null)
+            {
+                throw new InvalidOperationException("A security token handler must be provided.");
             }
 
             // Extract the main identity from the principal.
             identity = (ClaimsIdentity) ticket.Principal.Identity;
 
-            // Store the unique subject identifier as a claim.
-            if (!identity.HasClaim(claim => claim.Type == OpenIdConnectConstants.Claims.Subject)) {
-                identity.AddClaim(OpenIdConnectConstants.Claims.Subject, identity.GetClaim(ClaimTypes.NameIdentifier));
+            if (string.IsNullOrEmpty(identity.GetClaim(OpenIdConnectConstants.Claims.Subject)))
+            {
+                throw new InvalidOperationException("The authentication ticket was rejected because " +
+                                                    "the mandatory subject claim was missing.");
             }
 
-            // Remove the ClaimTypes.NameIdentifier claims to avoid getting duplicate claims.
-            // Note: the "sub" claim is automatically mapped by JwtSecurityTokenHandler
-            // to ClaimTypes.NameIdentifier when validating a JWT token.
-            // Note: make sure to call ToArray() to avoid an InvalidOperationException
-            // on old versions of Mono, where FindAll() is implemented using an iterator.
-            foreach (var claim in identity.FindAll(ClaimTypes.NameIdentifier).ToArray()) {
-                identity.RemoveClaim(claim);
+            // Note: identity tokens must be signed but an exception is made by the OpenID Connect specification
+            // when they are returned from the token endpoint: in this case, signing is not mandatory, as the TLS
+            // server validation can be used as a way to ensure an identity token was issued by a trusted party.
+            // See http://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation for more information.
+            if (notification.SigningCredentials == null && request.IsAuthorizationRequest())
+            {
+                throw new InvalidOperationException("A signing key must be provided.");
             }
-
-            // Store the "unique_id" property as a claim.
-            identity.AddClaim(OpenIdConnectConstants.Claims.JwtId, ticket.GetTicketId());
 
             // Store the "usage" property as a claim.
-            identity.AddClaim(OpenIdConnectConstants.Claims.Usage, ticket.GetUsage());
+            identity.AddClaim(OpenIdConnectConstants.Claims.TokenUsage, OpenIdConnectConstants.TokenUsages.IdToken);
 
-            // If the ticket is marked as confidential, add a new
-            // "confidential" claim in the security token.
-            if (ticket.IsConfidential()) {
-                identity.AddClaim(new Claim(OpenIdConnectConstants.Claims.Confidential, "true", ClaimValueTypes.Boolean));
+            // Store the "unique_id" property as a claim.
+            identity.AddClaim(OpenIdConnectConstants.Claims.JwtId, ticket.GetTokenId());
+
+            // Store the "confidentiality_level" property as a claim.
+            var confidentiality = ticket.GetProperty(OpenIdConnectConstants.Properties.ConfidentialityLevel);
+            if (!string.IsNullOrEmpty(confidentiality))
+            {
+                identity.AddClaim(OpenIdConnectConstants.Claims.ConfidentialityLevel, confidentiality);
             }
 
             // Store the audiences as claims.
-            foreach (var audience in notification.Audiences) {
+            foreach (var audience in notification.Audiences)
+            {
                 identity.AddClaim(OpenIdConnectConstants.Claims.Audience, audience);
             }
 
@@ -373,39 +367,49 @@ namespace AspNet.Security.OpenIdConnect.Server {
             // be included in the id_token generated by the token endpoint.
             // See http://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
             var nonce = request.Nonce;
-            if (request.IsAuthorizationCodeGrantType()) {
+            if (request.IsAuthorizationCodeGrantType())
+            {
                 // Restore the nonce stored in the authentication
                 // ticket extracted from the authorization code.
-                nonce = ticket.GetNonce();
+                nonce = ticket.GetProperty(OpenIdConnectConstants.Properties.Nonce);
             }
 
-            if (!string.IsNullOrEmpty(nonce)) {
+            if (!string.IsNullOrEmpty(nonce))
+            {
                 identity.AddClaim(OpenIdConnectConstants.Claims.Nonce, nonce);
             }
 
-            using (var algorithm = OpenIdConnectServerHelpers.GetHashAlgorithm(notification.SigningCredentials.Algorithm)) {
-                // Create an authorization code hash if necessary.
-                if (!string.IsNullOrEmpty(response.Code)) {
-                    var hash = algorithm.ComputeHash(Encoding.ASCII.GetBytes(response.Code));
+            if (notification.SigningCredentials != null && (!string.IsNullOrEmpty(response.Code) ||
+                                                            !string.IsNullOrEmpty(response.AccessToken)))
+            {
+                using (var algorithm = OpenIdConnectServerHelpers.GetHashAlgorithm(notification.SigningCredentials.Algorithm))
+                {
+                    // Create an authorization code hash if necessary.
+                    if (!string.IsNullOrEmpty(response.Code))
+                    {
+                        var hash = algorithm.ComputeHash(Encoding.ASCII.GetBytes(response.Code));
 
-                    // Note: only the left-most half of the hash of the octets is used.
-                    // See http://openid.net/specs/openid-connect-core-1_0.html#HybridIDToken
-                    identity.AddClaim(OpenIdConnectConstants.Claims.CodeHash, Base64UrlEncoder.Encode(hash, 0, hash.Length / 2));
-                }
+                        // Note: only the left-most half of the hash of the octets is used.
+                        // See http://openid.net/specs/openid-connect-core-1_0.html#HybridIDToken
+                        identity.AddClaim(OpenIdConnectConstants.Claims.CodeHash, Base64UrlEncoder.Encode(hash, 0, hash.Length / 2));
+                    }
 
-                // Create an access token hash if necessary.
-                if (!string.IsNullOrEmpty(response.AccessToken)) {
-                    var hash = algorithm.ComputeHash(Encoding.ASCII.GetBytes(response.AccessToken));
+                    // Create an access token hash if necessary.
+                    if (!string.IsNullOrEmpty(response.AccessToken))
+                    {
+                        var hash = algorithm.ComputeHash(Encoding.ASCII.GetBytes(response.AccessToken));
 
-                    // Note: only the left-most half of the hash of the octets is used.
-                    // See http://openid.net/specs/openid-connect-core-1_0.html#CodeIDToken
-                    identity.AddClaim(OpenIdConnectConstants.Claims.AccessTokenHash, Base64UrlEncoder.Encode(hash, 0, hash.Length / 2));
+                        // Note: only the left-most half of the hash of the octets is used.
+                        // See http://openid.net/specs/openid-connect-core-1_0.html#CodeIDToken
+                        identity.AddClaim(OpenIdConnectConstants.Claims.AccessTokenHash, Base64UrlEncoder.Encode(hash, 0, hash.Length / 2));
+                    }
                 }
             }
 
             // Extract the presenters from the authentication ticket.
             var presenters = notification.Presenters.ToArray();
-            switch (presenters.Length) {
+            switch (presenters.Length)
+            {
                 case 0: break;
 
                 case 1:
@@ -421,107 +425,124 @@ namespace AspNet.Security.OpenIdConnect.Server {
                     break;
             }
 
-            var token = notification.SecurityTokenHandler.CreateJwtSecurityToken(
-                subject: identity,
-                issuer: notification.Issuer,
-                signingCredentials: notification.SigningCredentials,
-                issuedAt: ticket.Properties.IssuedUtc.Value.UtcDateTime,
-                notBefore: ticket.Properties.IssuedUtc.Value.UtcDateTime,
-                expires: ticket.Properties.ExpiresUtc.Value.UtcDateTime);
+            var token = notification.SecurityTokenHandler.CreateEncodedJwt(new SecurityTokenDescriptor
+            {
+                Subject = identity,
+                Issuer = notification.Issuer,
+                EncryptingCredentials = notification.EncryptingCredentials,
+                SigningCredentials = notification.SigningCredentials,
+                IssuedAt = notification.Ticket.Properties.IssuedUtc?.UtcDateTime,
+                NotBefore = notification.Ticket.Properties.IssuedUtc?.UtcDateTime,
+                Expires = notification.Ticket.Properties.ExpiresUtc?.UtcDateTime
+            });
 
-            var x509SecurityKey = notification.SigningCredentials.Key as X509SecurityKey;
-            if (x509SecurityKey != null) {
-                // Note: unlike "kid", "x5t" is not automatically added by JwtHeader's constructor in IdentityModel for .NET Core.
-                // Though not required by the specifications, this property is needed for IdentityModel for Katana to work correctly.
-                // See https://github.com/aspnet-contrib/AspNet.Security.OpenIdConnect.Server/issues/132
-                // and https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet/issues/181.
-                token.Header[JwtHeaderParameterNames.X5t] = Base64UrlEncoder.Encode(x509SecurityKey.Certificate.GetCertHash());
-            }
+            Logger.LogTrace("A new identity token was successfully generated using the specified " +
+                            "security token handler: {Token} ; {Claims} ; {Properties}.",
+                            token, ticket.Principal.Claims, ticket.Properties.Items);
 
-            return notification.SecurityTokenHandler.WriteToken(token);
+            return token;
         }
 
         private async Task<string> SerializeRefreshTokenAsync(
             ClaimsPrincipal principal, AuthenticationProperties properties,
-            OpenIdConnectRequest request, OpenIdConnectResponse response) {
-            // properties.IssuedUtc and properties.ExpiresUtc
-            // should always be preferred when explicitly set.
-            if (properties.IssuedUtc == null) {
-                properties.IssuedUtc = Options.SystemClock.UtcNow;
-            }
-
-            if (properties.ExpiresUtc == null) {
-                properties.ExpiresUtc = properties.IssuedUtc + Options.RefreshTokenLifetime;
-            }
-
-            // Claims in refresh tokens are never filtered as they are supposed to be opaque:
+            OpenIdConnectRequest request, OpenIdConnectResponse response)
+        {
+            // Note: claims in refresh tokens are never filtered as they are supposed to be opaque:
             // SerializeAccessTokenAsync and SerializeIdentityTokenAsync are responsible of ensuring
             // that subsequent access and identity tokens are correctly filtered.
-            var ticket = new AuthenticationTicket(principal, properties, Options.AuthenticationScheme);
-            ticket.SetUsage(OpenIdConnectConstants.Usages.RefreshToken);
 
-            // Associate a random identifier with the refresh token.
-            ticket.SetTicketId(Guid.NewGuid().ToString());
+            // Create a new ticket containing the updated properties.
+            var ticket = new AuthenticationTicket(principal, properties, Scheme.Name);
+            ticket.Properties.IssuedUtc = Options.SystemClock.UtcNow;
 
-            // By default, add the client_id to the list of the
-            // presenters allowed to use the refresh token.
-            if (!string.IsNullOrEmpty(request.ClientId)) {
-                ticket.SetPresenters(request.ClientId);
+            // Only set the expiration date if a lifetime was specified in either the ticket or the options.
+            var lifetime = ticket.GetRefreshTokenLifetime() ?? Options.RefreshTokenLifetime;
+            if (lifetime.HasValue)
+            {
+                ticket.Properties.ExpiresUtc = ticket.Properties.IssuedUtc + lifetime.Value;
             }
 
-            var notification = new SerializeRefreshTokenContext(Context, Options, request, response, ticket) {
+            // Associate a random identifier with the refresh token.
+            ticket.SetTokenId(Guid.NewGuid().ToString());
+
+            // Remove the unwanted properties from the authentication ticket.
+            ticket.RemoveProperty(OpenIdConnectConstants.Properties.AuthorizationCodeLifetime)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.CodeChallenge)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.CodeChallengeMethod)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.Nonce)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.OriginalRedirectUri)
+                  .RemoveProperty(OpenIdConnectConstants.Properties.TokenUsage);
+
+            var notification = new SerializeRefreshTokenContext(Context, Scheme, Options, request, response, ticket)
+            {
                 DataFormat = Options.RefreshTokenFormat
             };
 
-            await Options.Provider.SerializeRefreshToken(notification);
+            await Provider.SerializeRefreshToken(notification);
 
-            if (notification.HandledResponse || !string.IsNullOrEmpty(notification.RefreshToken)) {
+            if (notification.IsHandled || !string.IsNullOrEmpty(notification.RefreshToken))
+            {
                 return notification.RefreshToken;
             }
 
-            else if (notification.Skipped) {
-                return null;
+            if (notification.DataFormat == null)
+            {
+                throw new InvalidOperationException("A data formatter must be provided.");
             }
 
-            if (!ReferenceEquals(ticket, notification.Ticket)) {
-                throw new InvalidOperationException("The authentication ticket cannot be replaced.");
-            }
+            var result = notification.DataFormat.Protect(ticket);
 
-            return notification.DataFormat?.Protect(ticket);
+            Logger.LogTrace("A new refresh token was successfully generated using the " +
+                            "specified data format: {Token} ; {Claims} ; {Properties}.",
+                            result, ticket.Principal.Claims, ticket.Properties.Items);
+
+            return result;
         }
 
-        private async Task<AuthenticationTicket> DeserializeAuthorizationCodeAsync(string code, OpenIdConnectRequest request) {
-            var notification = new DeserializeAuthorizationCodeContext(Context, Options, request, code) {
+        private async Task<AuthenticationTicket> DeserializeAuthorizationCodeAsync(string code, OpenIdConnectRequest request)
+        {
+            var notification = new DeserializeAuthorizationCodeContext(Context, Scheme, Options, request, code)
+            {
                 DataFormat = Options.AuthorizationCodeFormat
             };
 
-            await Options.Provider.DeserializeAuthorizationCode(notification);
+            await Provider.DeserializeAuthorizationCode(notification);
 
-            if (notification.HandledResponse || notification.Ticket != null) {
+            if (notification.IsHandled || notification.Ticket != null)
+            {
+                notification.Ticket?.SetTokenUsage(OpenIdConnectConstants.TokenUsages.AuthorizationCode);
+
                 return notification.Ticket;
             }
 
-            else if (notification.Skipped) {
-                return null;
+            if (notification.DataFormat == null)
+            {
+                throw new InvalidOperationException("A data formatter must be provided.");
             }
 
-            var ticket = notification.DataFormat?.Unprotect(code);
-            if (ticket == null) {
-                return null;
-            }
-
-            // Ensure the received ticket is an authorization code.
-            if (!ticket.IsAuthorizationCode()) {
-                Logger.LogDebug("The received token was not an authorization code: {Code}.", code);
+            var ticket = notification.DataFormat.Unprotect(code);
+            if (ticket == null)
+            {
+                Logger.LogTrace("The received token was invalid or malformed: {Code}.", code);
 
                 return null;
             }
+
+            // Note: since the data formatter relies on a data protector using different "purposes" strings
+            // per token type, the ticket returned by Unprotect() is guaranteed to be an authorization code.
+            ticket.SetTokenUsage(OpenIdConnectConstants.TokenUsages.AuthorizationCode);
+
+            Logger.LogTrace("The authorization code '{Code}' was successfully validated using " +
+                            "the specified token data format: {Claims} ; {Properties}.",
+                            code, ticket.Principal.Claims, ticket.Properties.Items);
 
             return ticket;
         }
 
-        private async Task<AuthenticationTicket> DeserializeAccessTokenAsync(string token, OpenIdConnectRequest request) {
-            var notification = new DeserializeAccessTokenContext(Context, Options, request, token) {
+        private async Task<AuthenticationTicket> DeserializeAccessTokenAsync(string token, OpenIdConnectRequest request)
+        {
+            var notification = new DeserializeAccessTokenContext(Context, Scheme, Options, request, token)
+            {
                 DataFormat = Options.AccessTokenFormat,
                 SecurityTokenHandler = Options.AccessTokenHandler
             };
@@ -529,34 +550,62 @@ namespace AspNet.Security.OpenIdConnect.Server {
             // Note: ValidateAudience and ValidateLifetime are always set to false:
             // if necessary, the audience and the expiration can be validated
             // in InvokeIntrospectionEndpointAsync or InvokeTokenEndpointAsync.
-            notification.TokenValidationParameters = new TokenValidationParameters {
+            notification.TokenValidationParameters = new TokenValidationParameters
+            {
                 IssuerSigningKeys = Options.SigningCredentials.Select(credentials => credentials.Key),
+                NameClaimType = OpenIdConnectConstants.Claims.Name,
+                RoleClaimType = OpenIdConnectConstants.Claims.Role,
+                TokenDecryptionKeys = Options.EncryptingCredentials.Select(credentials => credentials.Key)
+                                                                   .Where(key => key is SymmetricSecurityKey),
                 ValidIssuer = Context.GetIssuer(Options),
                 ValidateAudience = false,
                 ValidateLifetime = false
             };
 
-            await Options.Provider.DeserializeAccessToken(notification);
+            await Provider.DeserializeAccessToken(notification);
 
-            if (notification.HandledResponse || notification.Ticket != null) {
+            if (notification.IsHandled || notification.Ticket != null)
+            {
+                notification.Ticket?.SetTokenUsage(OpenIdConnectConstants.TokenUsages.AccessToken);
+
                 return notification.Ticket;
             }
 
-            else if (notification.Skipped) {
-                return null;
-            }
-
             var handler = notification.SecurityTokenHandler as ISecurityTokenValidator;
-            if (handler == null) {
-                return notification.DataFormat?.Unprotect(token);
+            if (handler == null)
+            {
+                if (notification.DataFormat == null)
+                {
+                    throw new InvalidOperationException("A security token handler or data formatter must be provided.");
+                }
+
+                var value = notification.DataFormat.Unprotect(token);
+                if (value == null)
+                {
+                    Logger.LogTrace("The received token was invalid or malformed: {Token}.", token);
+
+                    return null;
+                }
+
+                // Note: since the data formatter relies on a data protector using different "purposes" strings
+                // per token type, the ticket returned by Unprotect() is guaranteed to be an access token.
+                value.SetTokenUsage(OpenIdConnectConstants.TokenUsages.AccessToken);
+
+                Logger.LogTrace("The access token '{Token}' was successfully validated using " +
+                                "the specified token data format: {Claims} ; {Properties}.",
+                                token, value.Principal.Claims, value.Properties.Items);
+
+                return value;
             }
 
             SecurityToken securityToken;
             ClaimsPrincipal principal;
 
-            try {
-                if (!handler.CanReadToken(token)) {
-                    Logger.LogDebug("The access token handler refused to read the token: {Token}", token);
+            try
+            {
+                if (!handler.CanReadToken(token))
+                {
+                    Logger.LogTrace("The access token '{Token}' was rejected by the security token handler.", token);
 
                     return null;
                 }
@@ -564,8 +613,9 @@ namespace AspNet.Security.OpenIdConnect.Server {
                 principal = handler.ValidateToken(token, notification.TokenValidationParameters, out securityToken);
             }
 
-            catch (Exception exception) {
-                Logger.LogDebug("An exception occured when deserializing an identity token: {Message}.", exception.Message);
+            catch (Exception exception)
+            {
+                Logger.LogDebug("An exception occured while deserializing an identity token: {Exception}.", exception);
 
                 return null;
             }
@@ -573,91 +623,79 @@ namespace AspNet.Security.OpenIdConnect.Server {
             // Parameters stored in AuthenticationProperties are lost
             // when the identity token is serialized using a security token handler.
             // To mitigate that, they are inferred from the claims or the security token.
-            var properties = new AuthenticationProperties {
+            var properties = new AuthenticationProperties
+            {
                 ExpiresUtc = securityToken.ValidTo,
                 IssuedUtc = securityToken.ValidFrom
             };
 
-            var ticket = new AuthenticationTicket(principal, properties, Options.AuthenticationScheme);
+            var ticket = new AuthenticationTicket(principal, properties, Scheme.Name)
+                .SetAudiences(principal.FindAll(OpenIdConnectConstants.Claims.Audience).Select(claim => claim.Value))
+                .SetConfidentialityLevel(principal.GetClaim(OpenIdConnectConstants.Claims.ConfidentialityLevel))
+                .SetPresenters(principal.FindAll(OpenIdConnectConstants.Claims.AuthorizedParty).Select(claim => claim.Value))
+                .SetScopes(principal.FindAll(OpenIdConnectConstants.Claims.Scope).Select(claim => claim.Value))
+                .SetTokenId(principal.GetClaim(OpenIdConnectConstants.Claims.JwtId))
+                .SetTokenUsage(principal.GetClaim(OpenIdConnectConstants.Claims.TokenUsage));
 
-            var audiences = principal.FindAll(OpenIdConnectConstants.Claims.Audience);
-            if (audiences.Any()) {
-                ticket.SetAudiences(audiences.Select(claim => claim.Value));
-            }
-
-            var presenters = principal.FindAll(OpenIdConnectConstants.Claims.AuthorizedParty);
-            if (presenters.Any()) {
-                ticket.SetPresenters(presenters.Select(claim => claim.Value));
-            }
-
-            var scopes = principal.FindAll(OpenIdConnectConstants.Claims.Scope);
-            if (scopes.Any()) {
-                ticket.SetScopes(scopes.Select(claim => claim.Value));
-            }
-
-            // Note: the token identifier may be stored in either the token_id claim
-            // or in the jti claim, which is the standard name used by JWT tokens.
-            var identifier = principal.FindFirst(OpenIdConnectConstants.Claims.JwtId) ??
-                             principal.FindFirst(OpenIdConnectConstants.Claims.TokenId);
-            if (identifier != null) {
-                ticket.SetTicketId(identifier.Value);
-            }
-
-            var usage = principal.FindFirst(OpenIdConnectConstants.Claims.Usage);
-            if (usage != null) {
-                ticket.SetUsage(usage.Value);
-            }
-
-            var confidential = principal.FindFirst(OpenIdConnectConstants.Claims.Confidential);
-            if (confidential != null && string.Equals(confidential.Value, "true", StringComparison.OrdinalIgnoreCase)) {
-                ticket.SetProperty(OpenIdConnectConstants.Properties.Confidential, "true");
-            }
-
-            // Ensure that e received ticket is an access token.
-            if (!ticket.IsAccessToken()) {
-                Logger.LogDebug("The received token was not an access token: {Token}.", token);
+            // Ensure that the received ticket is an access token.
+            if (!ticket.IsAccessToken())
+            {
+                Logger.LogTrace("The received token was not an access token: {Token}.", token);
 
                 return null;
             }
 
+            Logger.LogTrace("The access token '{Token}' was successfully validated using " +
+                            "the specified security token handler: {Claims} ; {Properties}.",
+                            token, ticket.Principal.Claims, ticket.Properties.Items);
+
             return ticket;
         }
 
-        private async Task<AuthenticationTicket> DeserializeIdentityTokenAsync(string token, OpenIdConnectRequest request) {
-            var notification = new DeserializeIdentityTokenContext(Context, Options, request, token) {
+        private async Task<AuthenticationTicket> DeserializeIdentityTokenAsync(string token, OpenIdConnectRequest request)
+        {
+            var notification = new DeserializeIdentityTokenContext(Context, Scheme, Options, request, token)
+            {
                 SecurityTokenHandler = Options.IdentityTokenHandler
             };
 
             // Note: ValidateAudience and ValidateLifetime are always set to false:
             // if necessary, the audience and the expiration can be validated
             // in InvokeIntrospectionEndpointAsync or InvokeTokenEndpointAsync.
-            notification.TokenValidationParameters = new TokenValidationParameters {
-                IssuerSigningKeys = Options.SigningCredentials.Select(credentials => credentials.Key),
+            notification.TokenValidationParameters = new TokenValidationParameters
+            {
+                IssuerSigningKeys = Options.SigningCredentials.Select(credentials => credentials.Key)
+                                                              .Where(key => key is AsymmetricSecurityKey),
+
+                NameClaimType = OpenIdConnectConstants.Claims.Name,
+                RoleClaimType = OpenIdConnectConstants.Claims.Role,
                 ValidIssuer = Context.GetIssuer(Options),
                 ValidateAudience = false,
                 ValidateLifetime = false
             };
 
-            await Options.Provider.DeserializeIdentityToken(notification);
+            await Provider.DeserializeIdentityToken(notification);
 
-            if (notification.HandledResponse || notification.Ticket != null) {
+            if (notification.IsHandled || notification.Ticket != null)
+            {
+                notification.Ticket?.SetTokenUsage(OpenIdConnectConstants.TokenUsages.IdToken);
+
                 return notification.Ticket;
             }
 
-            else if (notification.Skipped) {
-                return null;
-            }
-
-            if (notification.SecurityTokenHandler == null) {
-                return null;
+            if (notification.SecurityTokenHandler == null)
+            {
+                throw new InvalidOperationException("A security token handler must be provided.");
             }
 
             SecurityToken securityToken;
             ClaimsPrincipal principal;
 
-            try {
-                if (!notification.SecurityTokenHandler.CanReadToken(token)) {
-                    Logger.LogDebug("The identity token handler refused to read the token: {Token}", token);
+            try
+            {
+                if (!notification.SecurityTokenHandler.CanReadToken(token))
+                {
+                    Logger.LogTrace("The identity token '{Token}' was rejected by the security token handler.", token);
 
                     return null;
                 }
@@ -665,8 +703,9 @@ namespace AspNet.Security.OpenIdConnect.Server {
                 principal = notification.SecurityTokenHandler.ValidateToken(token, notification.TokenValidationParameters, out securityToken);
             }
 
-            catch (Exception exception) {
-                Logger.LogDebug("An exception occured when deserializing an identity token: {Message}.", exception.Message);
+            catch (Exception exception)
+            {
+                Logger.LogDebug("An exception occured while deserializing an identity token: {Exception}.", exception);
 
                 return null;
             }
@@ -674,74 +713,70 @@ namespace AspNet.Security.OpenIdConnect.Server {
             // Parameters stored in AuthenticationProperties are lost
             // when the identity token is serialized using a security token handler.
             // To mitigate that, they are inferred from the claims or the security token.
-            var properties = new AuthenticationProperties {
+            var properties = new AuthenticationProperties
+            {
                 ExpiresUtc = securityToken.ValidTo,
                 IssuedUtc = securityToken.ValidFrom
             };
 
-            var ticket = new AuthenticationTicket(principal, properties, Options.AuthenticationScheme);
+            var ticket = new AuthenticationTicket(principal, properties, Scheme.Name)
+                .SetAudiences(principal.FindAll(OpenIdConnectConstants.Claims.Audience).Select(claim => claim.Value))
+                .SetConfidentialityLevel(principal.GetClaim(OpenIdConnectConstants.Claims.ConfidentialityLevel))
+                .SetPresenters(principal.FindAll(OpenIdConnectConstants.Claims.AuthorizedParty).Select(claim => claim.Value))
+                .SetTokenId(principal.GetClaim(OpenIdConnectConstants.Claims.JwtId))
+                .SetTokenUsage(principal.GetClaim(OpenIdConnectConstants.Claims.TokenUsage));
 
-            var audiences = principal.FindAll(OpenIdConnectConstants.Claims.Audience);
-            if (audiences.Any()) {
-                ticket.SetAudiences(audiences.Select(claim => claim.Value));
-            }
-
-            var presenters = principal.FindAll(OpenIdConnectConstants.Claims.AuthorizedParty);
-            if (presenters.Any()) {
-                ticket.SetPresenters(presenters.Select(claim => claim.Value));
-            }
-
-            var identifier = principal.FindFirst(OpenIdConnectConstants.Claims.JwtId);
-            if (identifier != null) {
-                ticket.SetTicketId(identifier.Value);
-            }
-
-            var usage = principal.FindFirst(OpenIdConnectConstants.Claims.Usage);
-            if (usage != null) {
-                ticket.SetUsage(usage.Value);
-            }
-
-            var confidential = principal.FindFirst(OpenIdConnectConstants.Claims.Confidential);
-            if (confidential != null && string.Equals(confidential.Value, "true", StringComparison.OrdinalIgnoreCase)) {
-                ticket.SetProperty(OpenIdConnectConstants.Properties.Confidential, "true");
-            }
-
-            // Ensure the received ticket is an identity token.
-            if (!ticket.IsIdentityToken()) {
-                Logger.LogDebug("The received token was not an identity token: {Token}.", token);
+            // Ensure that the received ticket is an identity token.
+            if (!ticket.IsIdentityToken())
+            {
+                Logger.LogTrace("The received token was not an identity token: {Token}.", token);
 
                 return null;
             }
+
+            Logger.LogTrace("The identity token '{Token}' was successfully validated using " +
+                            "the specified security token handler: {Claims} ; {Properties}.",
+                            token, ticket.Principal.Claims, ticket.Properties.Items);
 
             return ticket;
         }
 
-        private async Task<AuthenticationTicket> DeserializeRefreshTokenAsync(string token, OpenIdConnectRequest request) {
-            var notification = new DeserializeRefreshTokenContext(Context, Options, request, token) {
+        private async Task<AuthenticationTicket> DeserializeRefreshTokenAsync(string token, OpenIdConnectRequest request)
+        {
+            var notification = new DeserializeRefreshTokenContext(Context, Scheme, Options, request, token)
+            {
                 DataFormat = Options.RefreshTokenFormat
             };
 
-            await Options.Provider.DeserializeRefreshToken(notification);
+            await Provider.DeserializeRefreshToken(notification);
 
-            if (notification.HandledResponse || notification.Ticket != null) {
+            if (notification.IsHandled || notification.Ticket != null)
+            {
+                notification.Ticket?.SetTokenUsage(OpenIdConnectConstants.TokenUsages.RefreshToken);
+
                 return notification.Ticket;
             }
 
-            else if (notification.Skipped) {
-                return null;
+            if (notification.DataFormat == null)
+            {
+                throw new InvalidOperationException("A data formatter must be provided.");
             }
 
-            var ticket = notification.DataFormat?.Unprotect(token);
-            if (ticket == null) {
-                return null;
-            }
-
-            // Ensure the received ticket is a refresh token.
-            if (!ticket.IsRefreshToken()) {
-                Logger.LogDebug("The received token was not a refresh token: {Token}.", token);
+            var ticket = notification.DataFormat.Unprotect(token);
+            if (ticket == null)
+            {
+                Logger.LogTrace("The received token was invalid or malformed: {Token}.", token);
 
                 return null;
             }
+
+            // Note: since the data formatter relies on a data protector using different "purposes" strings
+            // per token type, the ticket returned by Unprotect() is guaranteed to be a refresh token.
+            ticket.SetTokenUsage(OpenIdConnectConstants.TokenUsages.RefreshToken);
+
+            Logger.LogTrace("The refresh token '{Token}' was successfully validated using " +
+                            "the specified token data format: {Claims} ; {Properties}.",
+                            token, ticket.Principal.Claims, ticket.Properties.Items);
 
             return ticket;
         }

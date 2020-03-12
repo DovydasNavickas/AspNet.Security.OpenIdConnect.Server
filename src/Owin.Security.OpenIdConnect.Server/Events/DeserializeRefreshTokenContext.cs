@@ -4,42 +4,32 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using System;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Notifications;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when receiving a refresh token.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.DeserializeRefreshToken"/> event.
     /// </summary>
-    public class DeserializeRefreshTokenContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class DeserializeRefreshTokenContext : BaseDeserializingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="DeserializeRefreshTokenContext"/> class
+        /// Creates a new instance of the <see cref="DeserializeRefreshTokenContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="token"></param>
         public DeserializeRefreshTokenContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             string token)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request)
+        {
             RefreshToken = token;
         }
-
-        /// <summary>
-        /// Gets the authorization or token request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets or sets the authentication ticket.
-        /// </summary>
-        public AuthenticationTicket Ticket { get; set; }
 
         /// <summary>
         /// Gets or sets the data format used to deserialize the authentication ticket.
@@ -47,7 +37,7 @@ namespace Owin.Security.OpenIdConnect.Server {
         public ISecureDataFormat<AuthenticationTicket> DataFormat { get; set; }
 
         /// <summary>
-        /// Gets the refresh code used by the client application.
+        /// Gets the refresh token used by the client application.
         /// </summary>
         public string RefreshToken { get; }
     }

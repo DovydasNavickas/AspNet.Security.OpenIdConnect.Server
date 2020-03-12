@@ -4,25 +4,28 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security.Notifications;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server starts
-    /// writing the configuration metadata to the response stream.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyConfigurationResponse"/> event.
     /// </summary>
-    public class ApplyConfigurationResponseContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class ApplyConfigurationResponseContext : BaseNotification<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="ApplyConfigurationResponseContext"/> class.
         /// </summary>
         public ApplyConfigurationResponseContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context, options) {
+            : base(context, options)
+        {
             Request = request;
             Response = response;
         }
@@ -30,10 +33,14 @@ namespace Owin.Security.OpenIdConnect.Server {
         /// <summary>
         /// Gets the configuration request.
         /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the configuration request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets the response returned to the client application.
+        /// Gets the configuration response.
         /// </summary>
         public new OpenIdConnectResponse Response { get; }
 

@@ -4,85 +4,116 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using System;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
-using Owin.Security.OpenIdConnect.Extensions;
+using Microsoft.Owin.Security.Notifications;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Base class used for certain event contexts
+    /// Represents an abstract base class used for certain event contexts.
     /// </summary>
-    public abstract class BaseValidatingClientContext : BaseValidatingContext {
+    public abstract class BaseValidatingClientContext : BaseValidatingContext
+    {
         /// <summary>
-        /// Initializes base class used for certain event contexts
+        /// Creates a new instance of the <see cref="BaseValidatingClientContext"/> class.
         /// </summary>
         protected BaseValidatingClientContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request)
+        {
+            ClientId = request.ClientId;
         }
 
         /// <summary>
-        /// Gets the authorization request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// The "client_id" parameter for the current request.
+        /// Gets the "client_id" parameter for the current request.
         /// The authorization server application is responsible for
         /// validating this value to ensure it identifies a registered client.
         /// </summary>
-        public string ClientId {
-            get { return Request.ClientId; }
-            set { Request.ClientId = value; }
-        }
+        public string ClientId { get; private set; }
 
         /// <summary>
-        /// The "client_secret" parameter for the current request.
+        /// Gets the "client_secret" parameter for the current request.
         /// The authorization server application is responsible for
         /// validating this value to ensure it identifies a registered client.
         /// </summary>
-        public string ClientSecret {
-            get { return Request.ClientSecret; }
-            set { Request.ClientSecret = value; }
+        public string ClientSecret => Request.ClientSecret;
+
+        /// <summary>
+        /// Gets a boolean indicating whether the
+        /// <see cref="Skip()"/> method was called.
+        /// </summary>
+        public bool IsSkipped { get; private set; }
+
+        /// <summary>
+        /// Skips the request validation.
+        /// </summary>
+        public virtual void Skip()
+        {
+            State = NotificationResultState.Continue;
+            IsSkipped = true;
+            IsRejected = false;
+            IsValidated = false;
         }
 
         /// <summary>
-        /// Sets client_id and marks the context
-        /// as validated by the application.
+        /// Rejects the request.
         /// </summary>
-        /// <param name="clientId"></param>
-        /// <returns></returns>
-        public bool Validate(string clientId) {
-            ClientId = clientId;
-
-            return Validate();
+        public override void Reject()
+        {
+            State = NotificationResultState.Continue;
+            IsSkipped = false;
+            IsRejected = true;
+            IsValidated = false;
         }
 
         /// <summary>
-        /// Sets client_id and client_secret and marks
-        /// the context as validated by the application.
+        /// Validates the request.
         /// </summary>
-        /// <param name="clientId"></param>
-        /// <param name="clientSecret"></param>
-        /// <returns></returns>
-        public bool Validate(string clientId, string clientSecret) {
-            ClientId = clientId;
-            ClientSecret = clientSecret;
+        public override void Validate()
+        {
+            // Don't allow default validation when the client_id
+            // is not explicitly provided by the client application.
+            if (string.IsNullOrEmpty(Request.ClientId))
+            {
+                throw new InvalidOperationException(
+                    "The request cannot be validated because no " +
+                    "client_id was specified by the client application.");
+            }
 
-            return Validate();
+            IsSkipped = false;
+
+            base.Validate();
         }
 
         /// <summary>
-        /// Resets client_id and client_secret and marks
-        /// the context as rejected by the application.
+        /// Validates the request and uses the specified identifier as the client identifier.
         /// </summary>
-        public override bool Reject() {
-            ClientId = null;
-            ClientSecret = null;
+        /// <param name="identifier">The "client_id" validated by the user code.</param>
+        public void Validate(string identifier)
+        {
+            if (string.IsNullOrEmpty(identifier))
+            {
+                throw new ArgumentException("The client_id cannot be null or empty.", nameof(identifier));
+            }
 
-            return base.Reject();
+            // Don't allow validation to alter the client_id parameter extracted
+            // from the request if the address was explicitly provided by the client.
+            if (!string.IsNullOrEmpty(Request.ClientId) &&
+                !string.Equals(Request.ClientId, identifier, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "The request cannot be validated because a different " +
+                    "client_id was specified by the client application.");
+            }
+
+            ClientId = identifier;
+            IsSkipped = false;
+
+            base.Validate();
         }
     }
 }

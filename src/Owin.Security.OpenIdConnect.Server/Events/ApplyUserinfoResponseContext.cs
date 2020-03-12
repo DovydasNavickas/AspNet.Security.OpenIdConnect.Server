@@ -4,39 +4,43 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security.Notifications;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used at the end of a userinfo request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyUserinfoResponse"/> event.
     /// </summary>
-    public class ApplyUserinfoResponseContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class ApplyUserinfoResponseContext : BaseNotification<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ApplyUserinfoResponseContext"/> class
+        /// Creates a new instance of the <see cref="ApplyUserinfoResponseContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="response"></param>
         public ApplyUserinfoResponseContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context, options) {
+            : base(context, options)
+        {
             Request = request;
             Response = response;
         }
 
         /// <summary>
-        /// Gets the token request.
+        /// Gets the userinfo request.
         /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the userinfo request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets the JSON payload returned to the client application.
+        /// Gets the userinfo response.
         /// </summary>
         public new OpenIdConnectResponse Response { get; }
 

@@ -4,38 +4,36 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using System;
 using System.Collections.Generic;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
-using Newtonsoft.Json.Linq;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server handles
-    /// the request made to the configuration metadata endpoint.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.HandleConfigurationRequest"/> event.
     /// </summary>
-    public class HandleConfigurationRequestContext : BaseValidatingContext {
+    public class HandleConfigurationRequestContext : BaseValidatingContext
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="HandleConfigurationRequestContext"/> class.
         /// </summary>
         public HandleConfigurationRequestContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request)
+        {
             Validate();
         }
 
         /// <summary>
-        /// Gets the configuration request.
+        /// Gets the additional parameters returned to the client application.
         /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets the list of properties returned to the client application.
-        /// </summary>
-        public IDictionary<string, JToken> Properties { get; } = new Dictionary<string, JToken>();
+        public IDictionary<string, OpenIdConnectParameter> Metadata { get; } =
+            new Dictionary<string, OpenIdConnectParameter>(StringComparer.Ordinal);
 
         /// <summary>
         /// Gets or sets the authorization endpoint address.
@@ -78,45 +76,79 @@ namespace Owin.Security.OpenIdConnect.Server {
         public string Issuer { get; set; }
 
         /// <summary>
+        /// Gets the list of claims supported by the authorization server.
+        /// </summary>
+        public ISet<string> Claims { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
         /// Gets a list of the code challenge methods
         /// supported by the authorization server.
         /// </summary>
-        public IList<string> CodeChallengeMethods { get; } = new List<string>();
+        public ISet<string> CodeChallengeMethods { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Gets a list of the grant types
+        /// Gets the list of grant types
         /// supported by the authorization server.
         /// </summary>
-        public IList<string> GrantTypes { get; } = new List<string>();
+        public ISet<string> GrantTypes { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Gets a list of the response modes
-        /// supported by the authorization server.
+        /// Gets a list of signing algorithms supported by the
+        /// authorization server for signing the identity tokens.
         /// </summary>
-        public IList<string> ResponseModes { get; } = new List<string>();
+        public ISet<string> IdTokenSigningAlgorithms { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Gets a list of the response types
-        /// supported by the authorization server.
+        /// Gets a list of client authentication methods supported by
+        /// the introspection endpoint provided by the authorization server.
         /// </summary>
-        public IList<string> ResponseTypes { get; } = new List<string>();
+        public ISet<string> IntrospectionEndpointAuthenticationMethods { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Gets a list of the scope values
+        /// Gets the list of response modes
         /// supported by the authorization server.
         /// </summary>
-        public IList<string> Scopes { get; } = new List<string>();
+        public ISet<string> ResponseModes { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Gets a list of the signing algorithms
+        /// Gets the list of response types
         /// supported by the authorization server.
         /// </summary>
-        public IList<string> SigningAlgorithms { get; } = new List<string>();
+        public ISet<string> ResponseTypes { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Gets a list of the subject types
+        /// Gets a list of client authentication methods supported by
+        /// the revocation endpoint provided by the authorization server.
+        /// </summary>
+        public ISet<string> RevocationEndpointAuthenticationMethods { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Gets the list of scope values
         /// supported by the authorization server.
         /// </summary>
-        public IList<string> SubjectTypes { get; } = new List<string>();
+        public ISet<string> Scopes { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Gets the list of subject types
+        /// supported by the authorization server.
+        /// </summary>
+        public ISet<string> SubjectTypes { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Gets a list of client authentication methods supported by
+        /// the token endpoint provided by the authorization server.
+        /// </summary>
+        public ISet<string> TokenEndpointAuthenticationMethods { get; } =
+            new HashSet<string>(StringComparer.Ordinal);
     }
 }

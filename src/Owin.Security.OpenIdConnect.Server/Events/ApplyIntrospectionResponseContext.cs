@@ -4,25 +4,28 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security.Notifications;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised before the authorization server starts
-    /// writing the token status/metadata to the response stream.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyIntrospectionResponse"/> event.
     /// </summary>
-    public class ApplyIntrospectionResponseContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class ApplyIntrospectionResponseContext : BaseNotification<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Creates an instance of this context.
+        /// Creates a new instance of the <see cref="ApplyIntrospectionResponseContext"/> class.
         /// </summary>
         public ApplyIntrospectionResponseContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context, options) {
+            : base(context, options)
+        {
             Request = request;
             Response = response;
         }
@@ -30,10 +33,14 @@ namespace Owin.Security.OpenIdConnect.Server {
         /// <summary>
         /// Gets the introspection request.
         /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the introspection request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
-        /// Gets the response returned to the caller.
+        /// Gets the introspection response.
         /// </summary>
         public new OpenIdConnectResponse Response { get; }
 

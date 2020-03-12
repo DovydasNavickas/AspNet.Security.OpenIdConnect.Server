@@ -4,44 +4,34 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using System;
 using System.IdentityModel.Tokens.Jwt;
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.IdentityModel.Tokens;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when receiving an identity token.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.DeserializeIdentityToken"/> event.
     /// </summary>
-    public class DeserializeIdentityTokenContext : BaseControlContext {
+    public class DeserializeIdentityTokenContext : BaseDeserializingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="DeserializeIdentityTokenContext"/> class
+        /// Creates a new instance of the <see cref="DeserializeIdentityTokenContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="token"></param>
         public DeserializeIdentityTokenContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             string token)
-            : base(context) {
-            Options = options;
-            Request = request;
+            : base(context, scheme, options, request)
+        {
             IdentityToken = token;
         }
-
-        /// <summary>
-        /// Gets the options used by the OpenID Connect server.
-        /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
-        /// Gets the authorization or token request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
         /// Gets or sets the validation parameters used to verify the authenticity of identity tokens.

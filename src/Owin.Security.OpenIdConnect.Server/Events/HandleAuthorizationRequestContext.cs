@@ -4,30 +4,27 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// An event raised after the Authorization Server has processed the request, but before it is passed on to the web application.
-    /// Calling RequestCompleted will prevent the request from passing on to the web application.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.HandleAuthorizationRequest"/> event.
     /// </summary>
-    public class HandleAuthorizationRequestContext : BaseValidatingContext {
+    public class HandleAuthorizationRequestContext : BaseValidatingTicketContext
+    {
         /// <summary>
-        /// Creates an instance of this context
+        /// Creates a new instance of the <see cref="HandleAuthorizationRequestContext"/> class.
         /// </summary>
         public HandleAuthorizationRequestContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request, null)
+        {
             Validate();
         }
-
-        /// <summary>
-        /// Gets the authorization request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
     }
 }

@@ -4,41 +4,40 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using AspNet.Security.OpenIdConnect.Extensions;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace AspNet.Security.OpenIdConnect.Server {
+namespace AspNet.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information when processing a logout response.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ApplyLogoutResponse"/> event.
     /// </summary>
-    public class ApplyLogoutResponseContext : BaseControlContext {
+    public class ApplyLogoutResponseContext : HandleRequestContext<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ApplyLogoutResponseContext"/> class
+        /// Creates a new instance of the <see cref="ApplyLogoutResponseContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="response"></param>
         public ApplyLogoutResponseContext(
             HttpContext context,
+            AuthenticationScheme scheme,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             OpenIdConnectResponse response)
-            : base(context) {
-            Options = options;
+            : base(context, scheme, options)
+        {
             Request = request;
             Response = response;
         }
 
         /// <summary>
-        /// Gets the options used by the OpenID Connect server.
-        /// </summary>
-        public OpenIdConnectServerOptions Options { get; }
-
-        /// <summary>
         /// Gets the logout request.
         /// </summary>
+        /// <remarks>
+        /// Note: this property may be null if an error occurred while
+        /// extracting the logout request from the HTTP request.
+        /// </remarks>
         public new OpenIdConnectRequest Request { get; }
 
         /// <summary>
@@ -52,5 +51,13 @@ namespace AspNet.Security.OpenIdConnect.Server {
         /// this property returns <c>null</c>.
         /// </summary>
         public string Error => Response.Error;
+
+        /// <summary>
+        /// Gets or sets the callback URL the user agent will be redirected to, if applicable.
+        /// Note: manually changing the value of this property is generally not recommended
+        /// and extreme caution must be taken to ensure the user agent is not redirected to
+        /// an untrusted address, which would result in an "open redirection" vulnerability.
+        /// </summary>
+        public string PostLogoutRedirectUri { get; set; }
     }
 }

@@ -4,42 +4,30 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
 using Microsoft.Owin.Security;
-using Microsoft.Owin.Security.Notifications;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when receiving an authorization code.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.DeserializeAuthorizationCode"/> event.
     /// </summary>
-    public class DeserializeAuthorizationCodeContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class DeserializeAuthorizationCodeContext : BaseDeserializingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="DeserializeAuthorizationCodeContext"/> class
+        /// Creates a new instance of the <see cref="DeserializeAuthorizationCodeContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="code"></param>
         public DeserializeAuthorizationCodeContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             string code)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request)
+        {
             AuthorizationCode = code;
         }
-
-        /// <summary>
-        /// Gets the authorization request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets or sets the authentication ticket.
-        /// </summary>
-        public AuthenticationTicket Ticket { get; set; }
 
         /// <summary>
         /// Gets or sets the data format used to deserialize the authentication ticket.

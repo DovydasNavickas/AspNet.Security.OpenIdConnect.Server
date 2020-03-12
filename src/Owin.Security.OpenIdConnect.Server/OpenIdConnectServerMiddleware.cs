@@ -5,47 +5,60 @@
  */
 
 using System;
-using System.IdentityModel.Tokens;
+using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
+using JetBrains.Annotations;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Owin;
 using Microsoft.Owin.BuilderProperties;
+using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Infrastructure;
 using Microsoft.Owin.Security.Interop;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Authorization Server middleware component which is added to an OWIN pipeline. This class is not
-    /// created by application code directly, instead it is added by calling the the IAppBuilder UseOpenIdConnectServer
-    /// extension method.
+    /// Provides the entry point necessary to register the
+    /// OpenID Connect server in an OWIN/Katana pipeline.
     /// </summary>
-    public class OpenIdConnectServerMiddleware : AuthenticationMiddleware<OpenIdConnectServerOptions> {
+    public class OpenIdConnectServerMiddleware : AuthenticationMiddleware<OpenIdConnectServerOptions>
+    {
         /// <summary>
-        /// Authorization Server middleware component which is added to an OWIN pipeline. This constructor is not
-        /// called by application code directly, instead it is added by calling the the IAppBuilder UseOpenIdConnectServer
-        /// extension method.
+        /// Creates a new instance of the <see cref="OpenIdConnectServerMiddleware"/> class.
         /// </summary>
-        public OpenIdConnectServerMiddleware(OwinMiddleware next, IAppBuilder app, OpenIdConnectServerOptions options)
-            : base(next, options) {
-            if (Options.HtmlEncoder == null) {
-                throw new ArgumentException("The HTML encoder registered in the options cannot be null.", nameof(options));
-            }
-
-            if (Options.Provider == null) {
+        public OpenIdConnectServerMiddleware(
+            [NotNull] OwinMiddleware next,
+            [NotNull] IDictionary<string, object> properties,
+            [NotNull] OpenIdConnectServerOptions options)
+            : base(next, options)
+        {
+            if (Options.Provider == null)
+            {
                 throw new ArgumentException("The authorization provider registered in the options cannot be null.", nameof(options));
             }
 
-            if (Options.SystemClock == null) {
+            if (Options.HtmlEncoder == null)
+            {
+                throw new ArgumentException("The HTML encoder registered in the options cannot be null.", nameof(options));
+            }
+
+            if (Options.SystemClock == null)
+            {
                 throw new ArgumentException("The system clock registered in the options cannot be null.", nameof(options));
             }
 
-            if (Options.Issuer != null) {
-                if (!Options.Issuer.IsAbsoluteUri) {
+            if (Options.Issuer != null)
+            {
+                if (!Options.Issuer.IsAbsoluteUri)
+                {
                     throw new ArgumentException("The issuer registered in the options must be a valid absolute URI.", nameof(options));
                 }
 
                 // See http://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery
-                if (!string.IsNullOrEmpty(Options.Issuer.Query) || !string.IsNullOrEmpty(Options.Issuer.Fragment)) {
+                if (!string.IsNullOrEmpty(Options.Issuer.Query) || !string.IsNullOrEmpty(Options.Issuer.Fragment))
+                {
                     throw new ArgumentException("The issuer registered in the options must contain " +
                                                 "no query and no fragment parts.", nameof(options));
                 }
@@ -55,66 +68,79 @@ namespace Owin.Security.OpenIdConnect.Server {
                 // running the different samples in test environments, where HTTPS is often disabled.
                 // To mitigate this issue, AllowInsecureHttp can be set to true to bypass the HTTPS check.
                 // See http://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery
-                if (!Options.AllowInsecureHttp && string.Equals(Options.Issuer.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)) {
+                if (!Options.AllowInsecureHttp && string.Equals(Options.Issuer.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+                {
                     throw new ArgumentException("The issuer registered in the options must be a HTTPS URI when " +
                                                 "AllowInsecureHttp is not set to true.", nameof(options));
                 }
             }
 
-            if (Options.AccessTokenHandler != null && !(Options.AccessTokenHandler is ISecurityTokenValidator)) {
-                throw new ArgumentException("The access token handler must implement 'ISecurityTokenValidator'.", nameof(options));
+            if (Options.AuthenticationMode == AuthenticationMode.Active)
+            {
+                throw new ArgumentException("Automatic authentication cannot be used with " +
+                                            "the OpenID Connect server middleware.", nameof(options));
             }
 
-            if (Options.SigningCredentials.Count == 0) {
-                throw new ArgumentException("At least one signing key must be registered. Consider registering " +
-                                            "a X.509 certificate or call 'options.SigningCredentials.AddEphemeralKey()' " +
-                                            "to generate and register an ephemeral signing key.", nameof(options));
+            // Ensure at least one signing certificate/key was registered if an access token handler was registered.
+            if (Options.AccessTokenHandler != null && Options.SigningCredentials.Count == 0)
+            {
+                throw new ArgumentException(
+                    "At least one signing key must be registered when using JWT as the access token format. " +
+                    "Consider registering a X.509 certificate using 'options.SigningCredentials.AddCertificate()' " +
+                    "or call 'options.SigningCredentials.AddEphemeralKey()' to use an ephemeral key.", nameof(options));
             }
 
-            if (Options.Logger == null) {
-                Options.Logger = new LoggerFactory().CreateLogger<OpenIdConnectServerMiddleware>();
+            if (Options.Logger == null)
+            {
+                options.Logger = NullLogger.Instance;
             }
 
-            if (Options.DataProtectionProvider == null) {
-                // Try to use the application name provided by
-                // the OWIN host as the application discriminator.
-                var discriminator = new AppProperties(app.Properties).AppName;
-
-                // When an application discriminator cannot be resolved from
-                // the OWIN host properties, generate a temporary identifier.
-                if (string.IsNullOrEmpty(discriminator)) {
-                    discriminator = Guid.NewGuid().ToString();
+            if (Options.DataProtectionProvider == null)
+            {
+                // Use the application name provided by the OWIN host as the Data Protection discriminator.
+                // If the application name cannot be resolved, throw an invalid operation exception.
+                var discriminator = new AppProperties(properties).AppName;
+                if (string.IsNullOrEmpty(discriminator))
+                {
+                    throw new InvalidOperationException(
+                        "The application name cannot be resolved from the OWIN application builder. " +
+                        "Consider manually setting the 'DataProtectionProvider' property in the " +
+                        "options using 'DataProtectionProvider.Create([unique application name])'.");
                 }
 
                 Options.DataProtectionProvider = DataProtectionProvider.Create(discriminator);
             }
 
-            if (Options.AccessTokenFormat == null) {
+            if (Options.AccessTokenFormat == null)
+            {
                 var protector = Options.DataProtectionProvider.CreateProtector(
-                    nameof(OpenIdConnectServerMiddleware),
-                    Options.AuthenticationType, "Access_Token", "v1");
+                    nameof(OpenIdConnectServerHandler),
+                    nameof(Options.AccessTokenFormat), Options.AuthenticationType);
 
                 Options.AccessTokenFormat = new AspNetTicketDataFormat(new DataProtectorShim(protector));
             }
 
-            if (Options.AuthorizationCodeFormat == null) {
+            if (Options.AuthorizationCodeFormat == null)
+            {
                 var protector = Options.DataProtectionProvider.CreateProtector(
-                    nameof(OpenIdConnectServerMiddleware),
-                    Options.AuthenticationType, "Authorization_Code", "v1");
+                    nameof(OpenIdConnectServerHandler),
+                    nameof(Options.AuthorizationCodeFormat), Options.AuthenticationType);
 
                 Options.AuthorizationCodeFormat = new AspNetTicketDataFormat(new DataProtectorShim(protector));
             }
 
-            if (Options.RefreshTokenFormat == null) {
+            if (Options.RefreshTokenFormat == null)
+            {
                 var protector = Options.DataProtectionProvider.CreateProtector(
-                    nameof(OpenIdConnectServerMiddleware),
-                    Options.AuthenticationType, "Refresh_Token", "v1");
+                    nameof(OpenIdConnectServerHandler),
+                    nameof(Options.RefreshTokenFormat), Options.AuthenticationType);
 
                 Options.RefreshTokenFormat = new AspNetTicketDataFormat(new DataProtectorShim(protector));
             }
 
-            var environment = new AppProperties(app.Properties).Get<string>("host.AppMode");
-            if (Options.AllowInsecureHttp && !string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase)) {
+            var environment = new AppProperties(properties).Get<string>("host.AppMode");
+            if (Options.AllowInsecureHttp && !string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase))
+            {
                 Options.Logger.LogWarning("Disabling the transport security requirement is not recommended in production. " +
                                           "Consider setting 'OpenIdConnectServerOptions.AllowInsecureHttp' to 'false' " +
                                           "to prevent the OpenID Connect server middleware from serving non-HTTPS requests.");
@@ -122,10 +148,11 @@ namespace Owin.Security.OpenIdConnect.Server {
         }
 
         /// <summary>
-        /// Called by the AuthenticationMiddleware base class to create a per-request handler.
+        /// Returns a new <see cref="OpenIdConnectServerHandler"/> instance.
         /// </summary>
-        /// <returns>A new instance of the request handler</returns>
-        protected override AuthenticationHandler<OpenIdConnectServerOptions> CreateHandler() {
+        /// <returns>A new instance of the <see cref="OpenIdConnectServerHandler"/> class.</returns>
+        protected override AuthenticationHandler<OpenIdConnectServerOptions> CreateHandler()
+        {
             return new OpenIdConnectServerHandler();
         }
     }

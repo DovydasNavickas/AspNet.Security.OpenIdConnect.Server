@@ -6,413 +6,44 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Security.Claims;
+using AspNet.Security.OpenIdConnect.Primitives;
 using JetBrains.Annotations;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http.Authentication;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
-namespace AspNet.Security.OpenIdConnect.Extensions {
+namespace AspNet.Security.OpenIdConnect.Extensions
+{
     /// <summary>
-    /// Provides extension methods to make <see cref="OpenIdConnectRequest"/>
-    /// easier to work with, specially in server-side scenarios.
+    /// Provides extension methods to make <see cref="AuthenticationTicket"/> easier to use.
     /// </summary>
-    public static class OpenIdConnectExtensions {
-        /// <summary>
-        /// Extracts the resources from an <see cref="OpenIdConnectRequest"/>.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        public static IEnumerable<string> GetResources([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.Resource?.Split(' ')
-                                   ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
-        }
-
-        /// <summary>
-        /// Extracts the scopes from an <see cref="OpenIdConnectRequest"/>.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        public static IEnumerable<string> GetScopes([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.Scope?.Split(' ')
-                                ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
-        }
-
-        /// <summary>
-        /// Extracts the resources from an <see cref="OpenIdConnectResponse"/>.
-        /// </summary>
-        /// <param name="response">The <see cref="OpenIdConnectResponse"/> instance.</param>
-        public static IEnumerable<string> GetResources([NotNull] this OpenIdConnectResponse response) {
-            if (response == null) {
-                throw new ArgumentNullException(nameof(response));
-            }
-
-            return response.Resource?.Split(' ')
-                                    ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
-        }
-
-        /// <summary>
-        /// Extracts the scopes from an <see cref="OpenIdConnectResponse"/>.
-        /// </summary>
-        /// <param name="response">The <see cref="OpenIdConnectResponse"/> instance.</param>
-        public static IEnumerable<string> GetScopes([NotNull] this OpenIdConnectResponse response) {
-            if (response == null) {
-                throw new ArgumentNullException(nameof(response));
-            }
-
-            return response.Scope?.Split(' ')
-                                 ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
-        }
-
-        /// <summary>
-        /// Determines whether the response_type exposed by the
-        /// <paramref name="request"/> contains the given <paramref name="component"/> or not.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <param name="component">The component to look for in the parameter.</param>
-        public static bool HasResponseType([NotNull] this OpenIdConnectRequest request, string component) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return HasValue(request.ResponseType, component);
-        }
-
-        /// <summary>
-        /// Determines whether the scope exposed by the <paramref name="request"/>
-        /// contains the given <paramref name="component"/> or not.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <param name="component">The component to look for in the parameter.</param>
-        public static bool HasScope([NotNull] this OpenIdConnectRequest request, string component) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return HasValue(request.Scope, component);
-        }
-
-        /// <summary>
-        /// Determines whether the scope exposed by the <paramref name="response"/>
-        /// contains the given <paramref name="component"/> or not.
-        /// </summary>
-        /// <param name="response">The <see cref="OpenIdConnectResponse"/> instance.</param>
-        /// <param name="component">The component to look for in the parameter.</param>
-        public static bool HasScope([NotNull] this OpenIdConnectResponse response, string component) {
-            if (response == null) {
-                throw new ArgumentNullException(nameof(response));
-            }
-
-            return HasValue(response.Scope, component);
-        }
-
-        /// <summary>
-        /// Determines whether the given request is an authorization request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is an authorization request, <c>false</c> otherwise.</returns>
-        public static bool IsAuthorizationRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Authorization;
-        }
-
-        /// <summary>
-        /// Determines whether the given request is a configuration request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is a configuration request, <c>false</c> otherwise.</returns>
-        public static bool IsConfigurationRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Configuration;
-        }
-
-        /// <summary>
-        /// Determines whether the given request is a cryptography request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is a cryptography request, <c>false</c> otherwise.</returns>
-        public static bool IsCryptographyRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Cryptography;
-        }
-
-        /// <summary>
-        /// Determines whether the given request is an introspection request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is an introspection request, <c>false</c> otherwise.</returns>
-        public static bool IsIntrospectionRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Introspection;
-        }
-
-        /// <summary>
-        /// Determines whether the given request is a logout request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is a logout request, <c>false</c> otherwise.</returns>
-        public static bool IsLogoutRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Logout;
-        }
-
-        /// <summary>
-        /// Determines whether the given request is a revocation request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is a revocation request, <c>false</c> otherwise.</returns>
-        public static bool IsRevocationRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Revocation;
-        }
-
-        /// <summary>
-        /// Determines whether the given request is a token request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is a token request, <c>false</c> otherwise.</returns>
-        public static bool IsTokenRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Token;
-        }
-
-        /// <summary>
-        /// Determines whether the given request is a userinfo request.
-        /// </summary>
-        /// <param name="request">The <see cref="OpenIdConnectRequest"/> instance.</param>
-        /// <returns><c>true</c> if the request is a userinfo request, <c>false</c> otherwise.</returns>
-        public static bool IsUserinfoRequest([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return request.RequestType == OpenIdConnectConstants.RequestTypes.Userinfo;
-        }
-
-        /// <summary>
-        /// True if the "response_type" parameter corresponds to the "none" response type.
-        /// See http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#none
-        /// </summary>
-        public static bool IsNoneFlow([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return string.Equals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.None, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        /// True if the "response_type" parameter
-        /// corresponds to the authorization code flow.
-        /// See http://tools.ietf.org/html/rfc6749#section-4.1.1
-        /// </summary>
-        public static bool IsAuthorizationCodeFlow([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return string.Equals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.Code, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        /// True if the "response_type" parameter
-        /// corresponds to the implicit flow.
-        /// See http://tools.ietf.org/html/rfc6749#section-4.2.1 and
-        /// http://openid.net/specs/openid-connect-core-1_0.html
-        /// </summary>
-        public static bool IsImplicitFlow([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            // Note: while the OIDC specs do not reuse the OAuth2-inherited response_type=token,
-            // it is considered as a valid response_type for the implicit flow, even for pure OIDC requests.
-            return SetEquals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.IdToken) ||
-
-                   SetEquals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.Token) ||
-
-                   SetEquals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.IdToken,
-                                                   OpenIdConnectConstants.ResponseTypes.Token);
-        }
-
-        /// <summary>
-        /// True if the "response_type" parameter
-        /// corresponds to the hybrid flow.
-        /// See http://tools.ietf.org/html/rfc6749#section-4.2.1 and
-        /// http://openid.net/specs/openid-connect-core-1_0.html
-        /// </summary>
-        public static bool IsHybridFlow([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return SetEquals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.Code,
-                                                   OpenIdConnectConstants.ResponseTypes.IdToken) ||
-
-                   SetEquals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.Code,
-                                                   OpenIdConnectConstants.ResponseTypes.Token) ||
-
-                   SetEquals(request.ResponseType, OpenIdConnectConstants.ResponseTypes.Code,
-                                                   OpenIdConnectConstants.ResponseTypes.IdToken,
-                                                   OpenIdConnectConstants.ResponseTypes.Token);
-        }
-
-        /// <summary>
-        /// True if the "response_mode" parameter is "fragment" or if
-        /// fragment is the default mode for the response_type received.
-        /// See http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html
-        /// </summary>
-        public static bool IsFragmentResponseMode([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            if (string.Equals(request.ResponseMode, OpenIdConnectConstants.ResponseModes.Fragment, StringComparison.Ordinal)) {
-                return true;
-            }
-
-            // Don't guess the response_mode value
-            // if an explicit value has ben provided.
-            if (!string.IsNullOrEmpty(request.ResponseMode)) {
-                return false;
-            }
-
-            // Both the implicit and the hybrid flows
-            // use response_mode=fragment by default.
-            return request.IsImplicitFlow() || request.IsHybridFlow();
-        }
-
-        /// <summary>
-        /// True if the "response_mode" parameter is "query" or if
-        /// query is the default mode for the response_type received.
-        /// See http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html
-        /// </summary>
-        public static bool IsQueryResponseMode([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            if (string.Equals(request.ResponseMode, OpenIdConnectConstants.ResponseModes.Query, StringComparison.Ordinal)) {
-                return true;
-            }
-
-            // Don't guess the response_mode value
-            // if an explicit value has ben provided.
-            if (!string.IsNullOrEmpty(request.ResponseMode)) {
-                return false;
-            }
-
-            // Code flow and "response_type=none" use response_mode=query by default.
-            return request.IsAuthorizationCodeFlow() || request.IsNoneFlow();
-        }
-
-        /// <summary>
-        /// True if the "response_mode" parameter is "form_post".
-        /// See http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html
-        /// </summary>
-        public static bool IsFormPostResponseMode([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return string.Equals(request.ResponseMode, OpenIdConnectConstants.ResponseModes.FormPost, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        /// True when the "grant_type" is "authorization_code".
-        /// See also http://tools.ietf.org/html/rfc6749#section-4.1.3
-        /// </summary>
-        public static bool IsAuthorizationCodeGrantType([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return string.Equals(request.GrantType, OpenIdConnectConstants.GrantTypes.AuthorizationCode, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        /// True when the "grant_type" is "client_credentials".
-        /// See also http://tools.ietf.org/html/rfc6749#section-4.4.2
-        /// </summary>
-        public static bool IsClientCredentialsGrantType([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return string.Equals(request.GrantType, OpenIdConnectConstants.GrantTypes.ClientCredentials, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        /// True when the "grant_type" is "refresh_token".
-        /// See also http://tools.ietf.org/html/rfc6749#section-6
-        /// </summary>
-        public static bool IsRefreshTokenGrantType([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return string.Equals(request.GrantType, OpenIdConnectConstants.GrantTypes.RefreshToken, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        /// True when the "grant_type" is "password".
-        /// See also http://tools.ietf.org/html/rfc6749#section-4.3.2
-        /// </summary>
-        public static bool IsPasswordGrantType([NotNull] this OpenIdConnectRequest request) {
-            if (request == null) {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            return string.Equals(request.GrantType, OpenIdConnectConstants.GrantTypes.Password, StringComparison.Ordinal);
-        }
-
+    public static class OpenIdConnectExtensions
+    {
         /// <summary>
         /// Gets the destinations associated with a claim.
         /// </summary>
         /// <param name="claim">The <see cref="Claim"/> instance.</param>
         /// <returns>The destinations associated with the claim.</returns>
-        public static IEnumerable<string> GetDestinations([NotNull] this Claim claim) {
-            if (claim == null) {
+        public static IEnumerable<string> GetDestinations([NotNull] this Claim claim)
+        {
+            if (claim == null)
+            {
                 throw new ArgumentNullException(nameof(claim));
             }
 
-            string destinations;
-            claim.Properties.TryGetValue(OpenIdConnectConstants.Properties.Destinations, out destinations);
+            claim.Properties.TryGetValue(OpenIdConnectConstants.Properties.Destinations, out string destinations);
 
-            return destinations?.Split(' ')
-                               ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
+            if (string.IsNullOrEmpty(destinations))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            return GetValues(destinations).Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -421,13 +52,26 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="claim">The <see cref="Claim"/> instance.</param>
         /// <param name="destination">The required destination.</param>
-        public static bool HasDestination([NotNull] this Claim claim, string destination) {
-            string destinations;
-            if (!claim.Properties.TryGetValue(OpenIdConnectConstants.Properties.Destinations, out destinations)) {
+        public static bool HasDestination([NotNull] this Claim claim, [NotNull] string destination)
+        {
+            if (claim == null)
+            {
+                throw new ArgumentNullException(nameof(claim));
+            }
+
+            if (string.IsNullOrEmpty(destination))
+            {
+                throw new ArgumentException("The destination cannot be null or empty.", nameof(destination));
+            }
+
+            claim.Properties.TryGetValue(OpenIdConnectConstants.Properties.Destinations, out string destinations);
+
+            if (string.IsNullOrEmpty(destinations))
+            {
                 return false;
             }
 
-            return HasValue(destinations, destination);
+            return HasValue(destinations, destination, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -435,23 +79,27 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="claim">The <see cref="Claim"/> instance.</param>
         /// <param name="destinations">The destinations.</param>
-        public static Claim SetDestinations([NotNull] this Claim claim, IEnumerable<string> destinations) {
-            if (claim == null) {
+        public static Claim SetDestinations([NotNull] this Claim claim, IEnumerable<string> destinations)
+        {
+            if (claim == null)
+            {
                 throw new ArgumentNullException(nameof(claim));
             }
 
-            if (destinations == null || !destinations.Any()) {
+            if (destinations == null || !destinations.Any())
+            {
                 claim.Properties.Remove(OpenIdConnectConstants.Properties.Destinations);
 
                 return claim;
             }
 
-            if (destinations.Any(destination => destination.Contains(" "))) {
-                throw new ArgumentException("Destinations cannot contain spaces.", nameof(destinations));
+            if (destinations.Any(destination => string.IsNullOrEmpty(destination)))
+            {
+                throw new ArgumentException("Destinations cannot be null or empty.", nameof(destinations));
             }
 
             claim.Properties[OpenIdConnectConstants.Properties.Destinations] =
-                string.Join(" ", destinations.Distinct(StringComparer.Ordinal));
+                new JArray(destinations.Distinct(StringComparer.OrdinalIgnoreCase)).ToString(Formatting.None);
 
             return claim;
         }
@@ -461,7 +109,8 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="claim">The <see cref="Claim"/> instance.</param>
         /// <param name="destinations">The destinations.</param>
-        public static Claim SetDestinations([NotNull] this Claim claim, params string[] destinations) {
+        public static Claim SetDestinations([NotNull] this Claim claim, params string[] destinations)
+        {
             // Note: guarding the destinations parameter against null values
             // is not necessary as AsEnumerable() doesn't throw on null values.
             return claim.SetDestinations(destinations.AsEnumerable());
@@ -477,12 +126,15 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </param>
         public static ClaimsIdentity Clone(
             [NotNull] this ClaimsIdentity identity,
-            [NotNull] Func<Claim, bool> filter) {
-            if (identity == null) {
+            [NotNull] Func<Claim, bool> filter)
+        {
+            if (identity == null)
+            {
                 throw new ArgumentNullException(nameof(identity));
             }
 
-            if (filter == null) {
+            if (filter == null)
+            {
                 throw new ArgumentNullException(nameof(filter));
             }
 
@@ -490,13 +142,16 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
 
             // Note: make sure to call ToArray() to avoid modifying
             // the initial collection iterated by ClaimsIdentity.Claims.
-            foreach (var claim in clone.Claims.ToArray()) {
-                if (!filter(claim)) {
+            foreach (var claim in clone.Claims.ToArray())
+            {
+                if (!filter(claim))
+                {
                     clone.RemoveClaim(claim);
                 }
             }
 
-            if (clone.Actor != null) {
+            if (clone.Actor != null)
+            {
                 clone.Actor = clone.Actor.Clone(filter);
             }
 
@@ -513,18 +168,22 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </param>
         public static ClaimsPrincipal Clone(
             [NotNull] this ClaimsPrincipal principal,
-            [NotNull] Func<Claim, bool> filter) {
-            if (principal == null) {
+            [NotNull] Func<Claim, bool> filter)
+        {
+            if (principal == null)
+            {
                 throw new ArgumentNullException(nameof(principal));
             }
 
-            if (filter == null) {
+            if (filter == null)
+            {
                 throw new ArgumentNullException(nameof(filter));
             }
 
             var clone = new ClaimsPrincipal();
 
-            foreach (var identity in principal.Identities) {
+            foreach (var identity in principal.Identities)
+            {
                 clone.AddIdentity(identity.Clone(filter));
             }
 
@@ -539,17 +198,21 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="value">The value associated with the claim.</param>
         public static ClaimsIdentity AddClaim(
             [NotNull] this ClaimsIdentity identity,
-            [NotNull] string type, [NotNull] string value) {
-            if (identity == null) {
+            [NotNull] string type, [NotNull] string value)
+        {
+            if (identity == null)
+            {
                 throw new ArgumentNullException(nameof(identity));
             }
 
-            if (string.IsNullOrEmpty(type)) {
-                throw new ArgumentException($"{nameof(type)} cannot be null or empty.", nameof(type));
+            if (string.IsNullOrEmpty(type))
+            {
+                throw new ArgumentException("The claim type cannot be null or empty.", nameof(type));
             }
 
-            if (string.IsNullOrEmpty(value)) {
-                throw new ArgumentException($"{nameof(value)} cannot be null or empty.", nameof(value));
+            if (string.IsNullOrEmpty(value))
+            {
+                throw new ArgumentException("The claim value cannot be null or empty.", nameof(value));
             }
 
             identity.AddClaim(new Claim(type, value));
@@ -566,20 +229,25 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         public static ClaimsIdentity AddClaim(
             [NotNull] this ClaimsIdentity identity,
             [NotNull] string type, [NotNull] string value,
-            [NotNull] IEnumerable<string> destinations) {
-            if (identity == null) {
+            [NotNull] IEnumerable<string> destinations)
+        {
+            if (identity == null)
+            {
                 throw new ArgumentNullException(nameof(identity));
             }
 
-            if (string.IsNullOrEmpty(type)) {
-                throw new ArgumentException($"{nameof(type)} cannot be null or empty.", nameof(type));
+            if (string.IsNullOrEmpty(type))
+            {
+                throw new ArgumentException("The claim type cannot be null or empty.", nameof(type));
             }
 
-            if (string.IsNullOrEmpty(value)) {
-                throw new ArgumentException($"{nameof(value)} cannot be null or empty.", nameof(value));
+            if (string.IsNullOrEmpty(value))
+            {
+                throw new ArgumentException("The claim value cannot be null or empty.", nameof(value));
             }
 
-            if (destinations == null) {
+            if (destinations == null)
+            {
                 throw new ArgumentNullException(nameof(destinations));
             }
 
@@ -597,7 +265,8 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         public static ClaimsIdentity AddClaim(
             [NotNull] this ClaimsIdentity identity,
             [NotNull] string type, [NotNull] string value,
-            [NotNull] params string[] destinations) {
+            [NotNull] params string[] destinations)
+        {
             // Note: guarding the destinations parameter against null values
             // is not necessary as AsEnumerable() doesn't throw on null values.
             return identity.AddClaim(type, value, destinations.AsEnumerable());
@@ -609,13 +278,16 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="identity">The identity.</param>
         /// <param name="type">The type associated with the claim.</param>
         /// <returns>The claim value.</returns>
-        public static string GetClaim([NotNull] this ClaimsIdentity identity, [NotNull] string type) {
-            if (identity == null) {
+        public static string GetClaim([NotNull] this ClaimsIdentity identity, [NotNull] string type)
+        {
+            if (identity == null)
+            {
                 throw new ArgumentNullException(nameof(identity));
             }
 
-            if (string.IsNullOrEmpty(type)) {
-                throw new ArgumentException($"{nameof(type)} cannot be null or empty.", nameof(type));
+            if (string.IsNullOrEmpty(type))
+            {
+                throw new ArgumentException("The claim type cannot be null or empty.", nameof(type));
             }
 
             return identity.FindFirst(type)?.Value;
@@ -627,16 +299,66 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="principal">The principal.</param>
         /// <param name="type">The type associated with the claim.</param>
         /// <returns>The claim value.</returns>
-        public static string GetClaim([NotNull] this ClaimsPrincipal principal, [NotNull] string type) {
-            if (principal == null) {
+        public static string GetClaim([NotNull] this ClaimsPrincipal principal, [NotNull] string type)
+        {
+            if (principal == null)
+            {
                 throw new ArgumentNullException(nameof(principal));
             }
 
-            if (string.IsNullOrEmpty(type)) {
-                throw new ArgumentException($"{nameof(type)} cannot be null or empty.", nameof(type));
+            if (string.IsNullOrEmpty(type))
+            {
+                throw new ArgumentException("The claim type cannot be null or empty.", nameof(type));
             }
 
             return principal.FindFirst(type)?.Value;
+        }
+
+        /// <summary>
+        /// Adds a given property in the authentication properties.
+        /// </summary>
+        /// <param name="properties">The authentication properties.</param>
+        /// <param name="property">The specific property to add.</param>
+        /// <param name="value">The value associated with the property.</param>
+        /// <returns>The authentication properties.</returns>
+        public static AuthenticationProperties AddProperty(
+            [NotNull] this AuthenticationProperties properties,
+            [NotNull] string property, [CanBeNull] string value)
+        {
+            if (properties == null)
+            {
+                throw new ArgumentNullException(nameof(properties));
+            }
+
+            if (string.IsNullOrEmpty(property))
+            {
+                throw new ArgumentException("The property name cannot be null or empty.", nameof(property));
+            }
+
+            properties.Items[property] = value;
+
+            return properties;
+        }
+
+        /// <summary>
+        /// Adds a given property in the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="property">The specific property to add.</param>
+        /// <param name="value">The value associated with the property.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket AddProperty(
+            [NotNull] this AuthenticationTicket ticket,
+            [NotNull] string property, [CanBeNull] string value)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            ticket.Properties.AddProperty(property, value);
+
+            return ticket;
         }
 
         /// <summary>
@@ -644,8 +366,10 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="properties">The authentication properties to copy.</param>
         /// <returns>A new instance containing the copied properties.</returns>
-        public static AuthenticationProperties Copy([NotNull] this AuthenticationProperties properties) {
-            if (properties == null) {
+        public static AuthenticationProperties Copy([NotNull] this AuthenticationProperties properties)
+        {
+            if (properties == null)
+            {
                 throw new ArgumentNullException(nameof(properties));
             }
 
@@ -657,12 +381,17 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket to copy.</param>
         /// <returns>A new instance containing the copied ticket</returns>
-        public static AuthenticationTicket Copy([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static AuthenticationTicket Copy([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return new AuthenticationTicket(ticket.Principal, ticket.Properties.Copy(), ticket.AuthenticationScheme);
+            // Note: don't use ClaimsIdentity.Clone() as it doesn't work properly on <.NET 4.6.
+            var principal = new ClaimsPrincipal(ticket.Principal.Clone(claim => true));
+
+            return new AuthenticationTicket(principal, ticket.Properties.Copy(), ticket.AuthenticationScheme);
         }
 
         /// <summary>
@@ -671,17 +400,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="properties">The authentication properties.</param>
         /// <param name="property">The specific property to look for.</param>
         /// <returns>The value corresponding to the property, or <c>null</c> if the property cannot be found.</returns>
-        public static string GetProperty([NotNull] this AuthenticationProperties properties, [NotNull] string property) {
-            if (properties == null) {
+        public static string GetProperty([NotNull] this AuthenticationProperties properties, [NotNull] string property)
+        {
+            if (properties == null)
+            {
                 throw new ArgumentNullException(nameof(properties));
             }
 
-            if (string.IsNullOrEmpty(property)) {
-                throw new ArgumentException($"{nameof(property)} cannot be null or empty.", nameof(property));
+            if (string.IsNullOrEmpty(property))
+            {
+                throw new ArgumentException("The property name cannot be null or empty.", nameof(property));
             }
 
-            string value;
-            if (!properties.Items.TryGetValue(property, out value)) {
+            if (!properties.Items.TryGetValue(property, out string value))
+            {
                 return null;
             }
 
@@ -694,8 +426,10 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="property">The specific property to look for.</param>
         /// <returns>The value corresponding to the property, or <c>null</c> if the property cannot be found.</returns>
-        public static string GetProperty([NotNull] this AuthenticationTicket ticket, [NotNull] string property) {
-            if (ticket == null) {
+        public static string GetProperty([NotNull] this AuthenticationTicket ticket, [NotNull] string property)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
@@ -708,15 +442,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns>The audiences list or <c>Enumerable.Empty</c> is the property cannot be found.</returns>
-        public static IEnumerable<string> GetAudiences([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static IEnumerable<string> GetAudiences([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.GetProperty(OpenIdConnectConstants.Properties.Audiences)
-                        ?.Split(' ')
-                        ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
+            var audiences = ticket.GetProperty(OpenIdConnectConstants.Properties.Audiences);
+            if (string.IsNullOrEmpty(audiences))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            return GetValues(audiences).Distinct(StringComparer.Ordinal);
         }
 
         /// <summary>
@@ -725,28 +464,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns>The presenters list or <c>Enumerable.Empty</c> is the property cannot be found.</returns>
-        public static IEnumerable<string> GetPresenters([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static IEnumerable<string> GetPresenters([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.GetProperty(OpenIdConnectConstants.Properties.Presenters)
-                        ?.Split(' ')
-                        ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
-        }
-
-        /// <summary>
-        /// Gets the nonce stored in the authentication ticket.
-        /// </summary>
-        /// <param name="ticket">The authentication ticket.</param>
-        /// <returns>The nonce or <c>null</c> is the property cannot be found.</returns>
-        public static string GetNonce([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
-                throw new ArgumentNullException(nameof(ticket));
+            var presenters = ticket.GetProperty(OpenIdConnectConstants.Properties.Presenters);
+            if (string.IsNullOrEmpty(presenters))
+            {
+                return Enumerable.Empty<string>();
             }
 
-            return ticket.GetProperty(OpenIdConnectConstants.Properties.Nonce);
+            return GetValues(presenters).Distinct(StringComparer.Ordinal);
         }
 
         /// <summary>
@@ -755,15 +486,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns>The resources list or <c>Enumerable.Empty</c> is the property cannot be found.</returns>
-        public static IEnumerable<string> GetResources([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static IEnumerable<string> GetResources([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.GetProperty(OpenIdConnectConstants.Properties.Resources)
-                        ?.Split(' ')
-                        ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
+            var resources = ticket.GetProperty(OpenIdConnectConstants.Properties.Resources);
+            if (string.IsNullOrEmpty(resources))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            return GetValues(resources).Distinct(StringComparer.Ordinal);
         }
 
         /// <summary>
@@ -772,15 +508,128 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns>The scopes list or <c>Enumerable.Empty</c> is the property cannot be found.</returns>
-        public static IEnumerable<string> GetScopes([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static IEnumerable<string> GetScopes([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.GetProperty(OpenIdConnectConstants.Properties.Scopes)
-                        ?.Split(' ')
-                        ?.Distinct(StringComparer.Ordinal)
-                   ?? Enumerable.Empty<string>();
+            var scopes = ticket.GetProperty(OpenIdConnectConstants.Properties.Scopes);
+            if (string.IsNullOrEmpty(scopes))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            return GetValues(scopes).Distinct(StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        /// Gets the access token lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <returns>The access token lifetime or <c>null</c> is the property cannot be found.</returns>
+
+        public static TimeSpan? GetAccessTokenLifetime([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.AccessTokenLifetime);
+            if (string.IsNullOrEmpty(value))
+            {
+                return null;
+            }
+
+            if (TimeSpan.TryParseExact(value, "c", CultureInfo.InvariantCulture, out TimeSpan result))
+            {
+                return result;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the authorization code lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <returns>The authorization code lifetime or <c>null</c> is the property cannot be found.</returns>
+
+        public static TimeSpan? GetAuthorizationCodeLifetime([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.AuthorizationCodeLifetime);
+            if (string.IsNullOrEmpty(value))
+            {
+                return null;
+            }
+
+            if (TimeSpan.TryParseExact(value, "c", CultureInfo.InvariantCulture, out TimeSpan result))
+            {
+                return result;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the identity token lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <returns>The identity token lifetime or <c>null</c> is the property cannot be found.</returns>
+
+        public static TimeSpan? GetIdentityTokenLifetime([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.IdentityTokenLifetime);
+            if (string.IsNullOrEmpty(value))
+            {
+                return null;
+            }
+
+            if (TimeSpan.TryParseExact(value, "c", CultureInfo.InvariantCulture, out TimeSpan result))
+            {
+                return result;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the refresh token lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <returns>The refresh token lifetime or <c>null</c> is the property cannot be found.</returns>
+
+        public static TimeSpan? GetRefreshTokenLifetime([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.RefreshTokenLifetime);
+            if (string.IsNullOrEmpty(value))
+            {
+                return null;
+            }
+
+            if (TimeSpan.TryParseExact(value, "c", CultureInfo.InvariantCulture, out TimeSpan result))
+            {
+                return result;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -788,12 +637,14 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns>The unique identifier or <c>null</c> is the property cannot be found.</returns>
-        public static string GetTicketId([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static string GetTokenId([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.GetProperty(OpenIdConnectConstants.Properties.TicketId);
+            return ticket.GetProperty(OpenIdConnectConstants.Properties.TokenId);
         }
 
         /// <summary>
@@ -801,12 +652,14 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns>The usage of the token or <c>null</c> is the property cannot be found.</returns>
-        public static string GetUsage([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static string GetTokenUsage([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.GetProperty(OpenIdConnectConstants.Properties.Usage);
+            return ticket.GetProperty(OpenIdConnectConstants.Properties.TokenUsage);
         }
 
         /// <summary>
@@ -815,17 +668,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="properties">The authentication properties.</param>
         /// <param name="property">The specific property to look for.</param>
         /// <returns><c>true</c> if the property was found, <c>false</c> otherwise.</returns>
-        public static bool HasProperty([NotNull] this AuthenticationProperties properties, [NotNull] string property) {
-            if (properties == null) {
+        public static bool HasProperty([NotNull] this AuthenticationProperties properties, [NotNull] string property)
+        {
+            if (properties == null)
+            {
                 throw new ArgumentNullException(nameof(properties));
             }
 
-            if (string.IsNullOrEmpty(property)) {
-                throw new ArgumentException($"{nameof(property)} cannot be null or empty.", nameof(property));
+            if (string.IsNullOrEmpty(property))
+            {
+                throw new ArgumentException("The property name cannot be null or empty.", nameof(property));
             }
 
-            string value;
-            if (!properties.Items.TryGetValue(property, out value)) {
+            if (!properties.Items.TryGetValue(property, out string value))
+            {
                 return false;
             }
 
@@ -838,8 +694,10 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="property">The specific property to look for.</param>
         /// <returns><c>true</c> if the property was found, <c>false</c> otherwise.</returns>
-        public static bool HasProperty([NotNull] this AuthenticationTicket ticket, [NotNull] string property) {
-            if (ticket == null) {
+        public static bool HasProperty([NotNull] this AuthenticationTicket ticket, [NotNull] string property)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
@@ -851,12 +709,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket contains at least one audience.</returns>
-        public static bool HasAudience([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool HasAudience([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.HasProperty(OpenIdConnectConstants.Properties.Audiences);
+            var audiences = ticket.GetProperty(OpenIdConnectConstants.Properties.Audiences);
+            if (string.IsNullOrEmpty(audiences))
+            {
+                return false;
+            }
+
+            return GetValues(audiences).Any();
         }
 
         /// <summary>
@@ -865,17 +731,25 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="audience">The audience.</param>
         /// <returns><c>true</c> if the ticket contains the given audience.</returns>
-        public static bool HasAudience([NotNull] this AuthenticationTicket ticket, string audience) {
-            if (ticket == null) {
+        public static bool HasAudience([NotNull] this AuthenticationTicket ticket, [NotNull] string audience)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var audiences = ticket.GetProperty(OpenIdConnectConstants.Properties.Audiences)?.Split(' ');
-            if (audiences == null) {
+            if (string.IsNullOrEmpty(audience))
+            {
+                throw new ArgumentException("The audience cannot be null or empty.", nameof(audience));
+            }
+
+            var audiences = ticket.GetProperty(OpenIdConnectConstants.Properties.Audiences);
+            if (string.IsNullOrEmpty(audiences))
+            {
                 return false;
             }
 
-            return audiences.Contains(audience, StringComparer.Ordinal);
+            return HasValue(audiences, audience, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -883,12 +757,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket contains at least one presenter.</returns>
-        public static bool HasPresenter([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool HasPresenter([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.HasProperty(OpenIdConnectConstants.Properties.Presenters);
+            var presenters = ticket.GetProperty(OpenIdConnectConstants.Properties.Presenters);
+            if (string.IsNullOrEmpty(presenters))
+            {
+                return false;
+            }
+
+            return GetValues(presenters).Any();
         }
 
         /// <summary>
@@ -897,17 +779,25 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="presenter">The presenter.</param>
         /// <returns><c>true</c> if the ticket contains the given presenter.</returns>
-        public static bool HasPresenter([NotNull] this AuthenticationTicket ticket, string presenter) {
-            if (ticket == null) {
+        public static bool HasPresenter([NotNull] this AuthenticationTicket ticket, [NotNull] string presenter)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var presenters = ticket.GetProperty(OpenIdConnectConstants.Properties.Presenters)?.Split(' ');
-            if (presenters == null) {
+            if (string.IsNullOrEmpty(presenter))
+            {
+                throw new ArgumentException("The presenter cannot be null or empty.", nameof(presenter));
+            }
+
+            var presenters = ticket.GetProperty(OpenIdConnectConstants.Properties.Presenters);
+            if (string.IsNullOrEmpty(presenters))
+            {
                 return false;
             }
 
-            return presenters.Contains(presenter, StringComparer.Ordinal);
+            return HasValue(presenters, presenter, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -915,12 +805,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket contains at least one resource.</returns>
-        public static bool HasResource([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool HasResource([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.HasProperty(OpenIdConnectConstants.Properties.Resources);
+            var resources = ticket.GetProperty(OpenIdConnectConstants.Properties.Resources);
+            if (string.IsNullOrEmpty(resources))
+            {
+                return false;
+            }
+
+            return GetValues(resources).Any();
         }
 
         /// <summary>
@@ -929,17 +827,25 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="resource">The resource.</param>
         /// <returns><c>true</c> if the ticket contains the given resource.</returns>
-        public static bool HasResource([NotNull] this AuthenticationTicket ticket, string resource) {
-            if (ticket == null) {
+        public static bool HasResource([NotNull] this AuthenticationTicket ticket, [NotNull] string resource)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var resources = ticket.GetProperty(OpenIdConnectConstants.Properties.Resources)?.Split(' ');
-            if (resources == null) {
+            if (string.IsNullOrEmpty(resource))
+            {
+                throw new ArgumentException("The resource cannot be null or empty.", nameof(resource));
+            }
+
+            var resources = ticket.GetProperty(OpenIdConnectConstants.Properties.Resources);
+            if (string.IsNullOrEmpty(resources))
+            {
                 return false;
             }
 
-            return resources.Contains(resource, StringComparer.Ordinal);
+            return HasValue(resources, resource, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -947,12 +853,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket contains at least one scope.</returns>
-        public static bool HasScope([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool HasScope([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.HasProperty(OpenIdConnectConstants.Properties.Scopes);
+            var scopes = ticket.GetProperty(OpenIdConnectConstants.Properties.Scopes);
+            if (string.IsNullOrEmpty(scopes))
+            {
+                return false;
+            }
+
+            return GetValues(scopes).Any();
         }
 
         /// <summary>
@@ -961,17 +875,25 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="scope">The scope.</param>
         /// <returns><c>true</c> if the ticket contains the given scope.</returns>
-        public static bool HasScope([NotNull] this AuthenticationTicket ticket, string scope) {
-            if (ticket == null) {
+        public static bool HasScope([NotNull] this AuthenticationTicket ticket, [NotNull] string scope)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var scopes = ticket.GetProperty(OpenIdConnectConstants.Properties.Scopes)?.Split(' ');
-            if (scopes == null) {
+            if (string.IsNullOrEmpty(scope))
+            {
+                throw new ArgumentException("The scope cannot be null or empty.", nameof(scope));
+            }
+
+            var scopes = ticket.GetProperty(OpenIdConnectConstants.Properties.Scopes);
+            if (string.IsNullOrEmpty(scopes))
+            {
                 return false;
             }
 
-            return scopes.Contains(scope, StringComparer.Ordinal);
+            return HasValue(scopes, scope, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -980,36 +902,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket is confidential, or <c>false</c> if it's not.</returns>
-        public static bool IsConfidential([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool IsConfidential([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.Confidential);
-            if (string.IsNullOrEmpty(value)) {
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.ConfidentialityLevel);
+            if (string.IsNullOrEmpty(value))
+            {
                 return false;
             }
 
-            return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// Gets a boolean value indicating whether the
-        /// authentication ticket corresponds to an access token.
-        /// </summary>
-        /// <param name="ticket">The authentication ticket.</param>
-        /// <returns><c>true</c> if the ticket corresponds to an authorization code.</returns>
-        public static bool IsAuthorizationCode([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
-                throw new ArgumentNullException(nameof(ticket));
-            }
-
-            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.Usage);
-            if (string.IsNullOrEmpty(value)) {
-                return false;
-            }
-
-            return string.Equals(value, OpenIdConnectConstants.Usages.AuthorizationCode, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(value, OpenIdConnectConstants.ConfidentialityLevels.Private, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -1018,17 +924,42 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket corresponds to an access token.</returns>
-        public static bool IsAccessToken([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool IsAccessToken([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.Usage);
-            if (string.IsNullOrEmpty(value)) {
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.TokenUsage);
+            if (string.IsNullOrEmpty(value))
+            {
                 return false;
             }
 
-            return string.Equals(value, OpenIdConnectConstants.Usages.AccessToken, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(value, OpenIdConnectConstants.TokenUsages.AccessToken, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Gets a boolean value indicating whether the
+        /// authentication ticket corresponds to an access token.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <returns><c>true</c> if the ticket corresponds to an authorization code.</returns>
+        public static bool IsAuthorizationCode([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.TokenUsage);
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            return string.Equals(value, OpenIdConnectConstants.TokenUsages.AuthorizationCode, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -1037,17 +968,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket corresponds to an identity token.</returns>
-        public static bool IsIdentityToken([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool IsIdentityToken([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.Usage);
-            if (string.IsNullOrEmpty(value)) {
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.TokenUsage);
+            if (string.IsNullOrEmpty(value))
+            {
                 return false;
             }
 
-            return string.Equals(value, OpenIdConnectConstants.Usages.IdentityToken, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(value, OpenIdConnectConstants.TokenUsages.IdToken, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -1056,17 +990,63 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// </summary>
         /// <param name="ticket">The authentication ticket.</param>
         /// <returns><c>true</c> if the ticket corresponds to a refresh token.</returns>
-        public static bool IsRefreshToken([NotNull] this AuthenticationTicket ticket) {
-            if (ticket == null) {
+        public static bool IsRefreshToken([NotNull] this AuthenticationTicket ticket)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.Usage);
-            if (string.IsNullOrEmpty(value)) {
+            var value = ticket.GetProperty(OpenIdConnectConstants.Properties.TokenUsage);
+            if (string.IsNullOrEmpty(value))
+            {
                 return false;
             }
 
-            return string.Equals(value, OpenIdConnectConstants.Usages.RefreshToken, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(value, OpenIdConnectConstants.TokenUsages.RefreshToken, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Removes a given property in the authentication properties.
+        /// </summary>
+        /// <param name="properties">The authentication properties.</param>
+        /// <param name="property">The specific property to remove.</param>
+        /// <returns>The authentication properties.</returns>
+        public static AuthenticationProperties RemoveProperty(
+            [NotNull] this AuthenticationProperties properties, [NotNull] string property)
+        {
+            if (properties == null)
+            {
+                throw new ArgumentNullException(nameof(properties));
+            }
+
+            if (string.IsNullOrEmpty(property))
+            {
+                throw new ArgumentException("The property name cannot be null or empty.", nameof(property));
+            }
+
+            properties.Items.Remove(property);
+
+            return properties;
+        }
+
+        /// <summary>
+        /// Removes a given property in the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="property">The specific property to remove.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket RemoveProperty(
+            [NotNull] this AuthenticationTicket ticket, [NotNull] string property)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            ticket.Properties.RemoveProperty(property);
+
+            return ticket;
         }
 
         /// <summary>
@@ -1078,16 +1058,20 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <returns>The authentication properties.</returns>
         public static AuthenticationProperties SetProperty(
             [NotNull] this AuthenticationProperties properties,
-            [NotNull] string property, [CanBeNull] string value) {
-            if (properties == null) {
+            [NotNull] string property, [CanBeNull] string value)
+        {
+            if (properties == null)
+            {
                 throw new ArgumentNullException(nameof(properties));
             }
 
-            if (string.IsNullOrEmpty(property)) {
-                throw new ArgumentException($"{nameof(property)} cannot be null or empty.", nameof(property));
+            if (string.IsNullOrEmpty(property))
+            {
+                throw new ArgumentException("The property name cannot be null or empty.", nameof(property));
             }
 
-            if (string.IsNullOrEmpty(value)) {
+            if (string.IsNullOrEmpty(value))
+            {
                 properties.Items.Remove(property);
 
                 return properties;
@@ -1105,40 +1089,16 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="property">The specific property to add, update or remove.</param>
         /// <param name="value">The value associated with the property.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationProperties SetProperty(
+        public static AuthenticationTicket SetProperty(
             [NotNull] this AuthenticationTicket ticket,
-            [NotNull] string property, [CanBeNull] string value) {
-            if (ticket == null) {
+            [NotNull] string property, [CanBeNull] string value)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            return ticket.Properties.SetProperty(property, value);
-        }
-
-        /// <summary>
-        /// Sets the audiences list in the authentication ticket.
-        /// Note: this method automatically excludes duplicate audiences.
-        /// </summary>
-        /// <param name="ticket">The authentication ticket.</param>
-        /// <param name="audiences">The audiences to store.</param>
-        /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetAudiences([NotNull] this AuthenticationTicket ticket, IEnumerable<string> audiences) {
-            if (ticket == null) {
-                throw new ArgumentNullException(nameof(ticket));
-            }
-
-            if (audiences == null || !audiences.Any()) {
-                ticket.Properties.Items.Remove(OpenIdConnectConstants.Properties.Audiences);
-
-                return ticket;
-            }
-
-            if (audiences.Any(audience => audience.Contains(" "))) {
-                throw new ArgumentException("The audiences cannot contain spaces.", nameof(audiences));
-            }
-
-            ticket.Properties.Items[OpenIdConnectConstants.Properties.Audiences] =
-                string.Join(" ", audiences.Distinct(StringComparer.Ordinal));
+            ticket.Properties.SetProperty(property, value);
 
             return ticket;
         }
@@ -1150,7 +1110,40 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="audiences">The audiences to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetAudiences([NotNull] this AuthenticationTicket ticket, params string[] audiences) {
+        public static AuthenticationTicket SetAudiences(
+            [NotNull] this AuthenticationTicket ticket,
+            [CanBeNull] IEnumerable<string> audiences)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            if (audiences == null || !audiences.Any())
+            {
+                ticket.Properties.Items.Remove(OpenIdConnectConstants.Properties.Audiences);
+
+                return ticket;
+            }
+
+            if (audiences.Any(audience => string.IsNullOrEmpty(audience)))
+            {
+                throw new ArgumentException("Audiences cannot be null or empty.", nameof(audiences));
+            }
+
+            return SetProperty(ticket, OpenIdConnectConstants.Properties.Audiences, audiences.Distinct(StringComparer.Ordinal));
+        }
+
+        /// <summary>
+        /// Sets the audiences list in the authentication ticket.
+        /// Note: this method automatically excludes duplicate audiences.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="audiences">The audiences to store.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket SetAudiences(
+            [NotNull] this AuthenticationTicket ticket, [CanBeNull] params string[] audiences)
+        {
             // Note: guarding the audiences parameter against null values
             // is not necessary as AsEnumerable() doesn't throw on null values.
             return ticket.SetAudiences(audiences.AsEnumerable());
@@ -1163,25 +1156,28 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="presenters">The presenters to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetPresenters([NotNull] this AuthenticationTicket ticket, IEnumerable<string> presenters) {
-            if (ticket == null) {
+        public static AuthenticationTicket SetPresenters(
+            [NotNull] this AuthenticationTicket ticket,
+            [CanBeNull] IEnumerable<string> presenters)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            if (presenters == null || !presenters.Any()) {
+            if (presenters == null || !presenters.Any())
+            {
                 ticket.Properties.Items.Remove(OpenIdConnectConstants.Properties.Presenters);
 
                 return ticket;
             }
 
-            if (presenters.Any(presenter => presenter.Contains(" "))) {
-                throw new ArgumentException("The presenters cannot contain spaces.", nameof(presenters));
+            if (presenters.Any(presenter => string.IsNullOrEmpty(presenter)))
+            {
+                throw new ArgumentException("Presenters cannot be null or empty.", nameof(presenters));
             }
 
-            ticket.Properties.Items[OpenIdConnectConstants.Properties.Presenters] =
-                string.Join(" ", presenters.Distinct(StringComparer.Ordinal));
-
-            return ticket;
+            return SetProperty(ticket, OpenIdConnectConstants.Properties.Presenters, presenters.Distinct(StringComparer.Ordinal));
         }
 
         /// <summary>
@@ -1191,7 +1187,9 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="presenters">The presenters to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetPresenters([NotNull] this AuthenticationTicket ticket, params string[] presenters) {
+        public static AuthenticationTicket SetPresenters(
+            [NotNull] this AuthenticationTicket ticket, [CanBeNull] params string[] presenters)
+        {
             // Note: guarding the presenters parameter against null values
             // is not necessary as AsEnumerable() doesn't throw on null values.
             return ticket.SetPresenters(presenters.AsEnumerable());
@@ -1204,25 +1202,28 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="resources">The resources to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetResources([NotNull] this AuthenticationTicket ticket, IEnumerable<string> resources) {
-            if (ticket == null) {
+        public static AuthenticationTicket SetResources(
+            [NotNull] this AuthenticationTicket ticket,
+            [CanBeNull] IEnumerable<string> resources)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            if (resources == null || !resources.Any()) {
+            if (resources == null || !resources.Any())
+            {
                 ticket.Properties.Items.Remove(OpenIdConnectConstants.Properties.Resources);
 
                 return ticket;
             }
 
-            if (resources.Any(resource => resource.Contains(" "))) {
-                throw new ArgumentException("The resources cannot contain spaces.", nameof(resources));
+            if (resources.Any(resource => string.IsNullOrEmpty(resource)))
+            {
+                throw new ArgumentException("Resources cannot be null or empty.", nameof(resources));
             }
 
-            ticket.Properties.Items[OpenIdConnectConstants.Properties.Resources] =
-                string.Join(" ", resources.Distinct(StringComparer.Ordinal));
-
-            return ticket;
+            return SetProperty(ticket, OpenIdConnectConstants.Properties.Resources, resources.Distinct(StringComparer.Ordinal));
         }
 
         /// <summary>
@@ -1232,7 +1233,9 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="resources">The resources to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetResources([NotNull] this AuthenticationTicket ticket, params string[] resources) {
+        public static AuthenticationTicket SetResources(
+            [NotNull] this AuthenticationTicket ticket, [CanBeNull] params string[] resources)
+        {
             // Note: guarding the resources parameter against null values
             // is not necessary as AsEnumerable() doesn't throw on null values.
             return ticket.SetResources(resources.AsEnumerable());
@@ -1245,25 +1248,28 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="scopes">The scopes to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetScopes([NotNull] this AuthenticationTicket ticket, IEnumerable<string> scopes) {
-            if (ticket == null) {
+        public static AuthenticationTicket SetScopes(
+            [NotNull] this AuthenticationTicket ticket,
+            [CanBeNull] IEnumerable<string> scopes)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            if (scopes == null || !scopes.Any()) {
+            if (scopes == null || !scopes.Any())
+            {
                 ticket.Properties.Items.Remove(OpenIdConnectConstants.Properties.Scopes);
 
                 return ticket;
             }
 
-            if (scopes.Any(scope => scope.Contains(" "))) {
-                throw new ArgumentException("The scopes cannot contain spaces.", nameof(scopes));
+            if (scopes.Any(scope => string.IsNullOrEmpty(scope)))
+            {
+                throw new ArgumentException("Scopes cannot be null or empty.", nameof(scopes));
             }
 
-            ticket.Properties.Items[OpenIdConnectConstants.Properties.Scopes] =
-                string.Join(" ", scopes.Distinct(StringComparer.Ordinal));
-
-            return ticket;
+            return SetProperty(ticket, OpenIdConnectConstants.Properties.Scopes, scopes.Distinct(StringComparer.Ordinal));
         }
 
         /// <summary>
@@ -1273,10 +1279,100 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="scopes">The scopes to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetScopes([NotNull] this AuthenticationTicket ticket, params string[] scopes) {
+        public static AuthenticationTicket SetScopes(
+            [NotNull] this AuthenticationTicket ticket, [CanBeNull] params string[] scopes)
+        {
             // Note: guarding the scopes parameter against null values
             // is not necessary as AsEnumerable() doesn't throw on null values.
             return ticket.SetScopes(scopes.AsEnumerable());
+        }
+
+        /// <summary>
+        /// Sets the confidentiality level associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="level">The confidentiality level of the token.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket SetConfidentialityLevel([NotNull] this AuthenticationTicket ticket, string level)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            return ticket.SetProperty(OpenIdConnectConstants.Properties.ConfidentialityLevel, level);
+        }
+
+        /// <summary>
+        /// Sets the access token lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="lifetime">The access token lifetime to store.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket SetAccessTokenLifetime([NotNull] this AuthenticationTicket ticket, TimeSpan? lifetime)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = lifetime?.ToString("c", CultureInfo.InvariantCulture);
+
+            return ticket.SetProperty(OpenIdConnectConstants.Properties.AccessTokenLifetime, value);
+        }
+
+        /// <summary>
+        /// Sets the authorization code lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="lifetime">The authorization code lifetime to store.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket SetAuthorizationCodeLifetime([NotNull] this AuthenticationTicket ticket, TimeSpan? lifetime)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = lifetime?.ToString("c", CultureInfo.InvariantCulture);
+
+            return ticket.SetProperty(OpenIdConnectConstants.Properties.AuthorizationCodeLifetime, value);
+        }
+
+        /// <summary>
+        /// Sets the identity token lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="lifetime">The identity token lifetime to store.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket SetIdentityTokenLifetime([NotNull] this AuthenticationTicket ticket, TimeSpan? lifetime)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = lifetime?.ToString("c", CultureInfo.InvariantCulture);
+
+            return ticket.SetProperty(OpenIdConnectConstants.Properties.IdentityTokenLifetime, value);
+        }
+
+        /// <summary>
+        /// Sets the refresh token lifetime associated with the authentication ticket.
+        /// </summary>
+        /// <param name="ticket">The authentication ticket.</param>
+        /// <param name="lifetime">The refresh token lifetime to store.</param>
+        /// <returns>The authentication ticket.</returns>
+        public static AuthenticationTicket SetRefreshTokenLifetime([NotNull] this AuthenticationTicket ticket, TimeSpan? lifetime)
+        {
+            if (ticket == null)
+            {
+                throw new ArgumentNullException(nameof(ticket));
+            }
+
+            var value = lifetime?.ToString("c", CultureInfo.InvariantCulture);
+
+            return ticket.SetProperty(OpenIdConnectConstants.Properties.RefreshTokenLifetime, value);
         }
 
         /// <summary>
@@ -1285,20 +1381,14 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="identifier">The unique identifier to store.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetTicketId([NotNull] this AuthenticationTicket ticket, string identifier) {
-            if (ticket == null) {
+        public static AuthenticationTicket SetTokenId([NotNull] this AuthenticationTicket ticket, string identifier)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            if (string.IsNullOrEmpty(identifier)) {
-                ticket.Properties.Items.Remove(OpenIdConnectConstants.Properties.TicketId);
-
-                return ticket;
-            }
-
-            ticket.Properties.Items[OpenIdConnectConstants.Properties.TicketId] = identifier;
-
-            return ticket;
+            return ticket.SetProperty(OpenIdConnectConstants.Properties.TokenId, identifier);
         }
 
         /// <summary>
@@ -1307,46 +1397,82 @@ namespace AspNet.Security.OpenIdConnect.Extensions {
         /// <param name="ticket">The authentication ticket.</param>
         /// <param name="usage">The usage of the token.</param>
         /// <returns>The authentication ticket.</returns>
-        public static AuthenticationTicket SetUsage([NotNull] this AuthenticationTicket ticket, string usage) {
-            if (ticket == null) {
+        public static AuthenticationTicket SetTokenUsage([NotNull] this AuthenticationTicket ticket, string usage)
+        {
+            if (ticket == null)
+            {
                 throw new ArgumentNullException(nameof(ticket));
             }
 
-            if (string.IsNullOrEmpty(usage)) {
-                ticket.Properties.Items.Remove(OpenIdConnectConstants.Properties.Usage);
+            return ticket.SetProperty(OpenIdConnectConstants.Properties.TokenUsage, usage);
+        }
+
+        private static AuthenticationTicket SetProperty(
+            AuthenticationTicket ticket, string property, IEnumerable<string> values)
+        {
+            Debug.Assert(ticket != null, "The authentication ticket cannot be null.");
+            Debug.Assert(!string.IsNullOrEmpty(property), "The property name cannot be null or empty.");
+
+            if (values == null || !values.Any())
+            {
+                ticket.Properties.Items.Remove(property);
 
                 return ticket;
             }
 
-            ticket.Properties.Items[OpenIdConnectConstants.Properties.Usage] = usage;
+            ticket.Properties.Items[property] = new JArray(values).ToString(Formatting.None);
 
             return ticket;
         }
 
-        private static bool HasValue(string source, string value) {
-            if (string.IsNullOrEmpty(source)) {
-                return false;
+        private static IEnumerable<string> GetValues(string source)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(source), "The source string shouldn't be null or empty.");
+
+            using (var reader = new JsonTextReader(new StringReader(source)))
+            {
+                var array = JArray.Load(reader);
+
+                for (var index = 0; index < array.Count; index++)
+                {
+                    var element = array[index] as JValue;
+                    if (element?.Type != JTokenType.String)
+                    {
+                        continue;
+                    }
+
+                    yield return (string) element.Value;
+                }
             }
 
-            return (from component in source.Split(' ')
-                    where string.Equals(component, value, StringComparison.Ordinal)
-                    select component).Any();
+            yield break;
         }
 
-        private static bool SetEquals(string source, params string[] components) {
-            if (string.IsNullOrEmpty(source)) {
-                return false;
+        private static bool HasValue(string source, string value, StringComparison comparison)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(source), "The source string shouldn't be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(value), "The value string shouldn't be null or empty.");
+
+            using (var reader = new JsonTextReader(new StringReader(source)))
+            {
+                var array = JArray.Load(reader);
+
+                for (var index = 0; index < array.Count; index++)
+                {
+                    var element = array[index] as JValue;
+                    if (element?.Type != JTokenType.String)
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals((string) element.Value, value, comparison))
+                    {
+                        return true;
+                    }
+                }
             }
 
-            if (components == null || !components.Any()) {
-                return false;
-            }
-
-            var set = new HashSet<string>(
-                collection: source.Split(' '),
-                comparer: StringComparer.Ordinal);
-
-            return set.SetEquals(components);
+            return false;
         }
     }
 }

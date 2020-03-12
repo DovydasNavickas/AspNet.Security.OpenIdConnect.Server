@@ -4,43 +4,31 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
-using System.IdentityModel.Tokens;
+using AspNet.Security.OpenIdConnect.Primitives;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.Owin;
 using Microsoft.Owin.Security;
-using Microsoft.Owin.Security.Notifications;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when receiving an access token.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.DeserializeAccessToken"/> event.
     /// </summary>
-    public class DeserializeAccessTokenContext : BaseNotification<OpenIdConnectServerOptions> {
+    public class DeserializeAccessTokenContext : BaseDeserializingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="DeserializeAccessTokenContext"/> class
+        /// Creates a new instance of the <see cref="DeserializeAccessTokenContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
-        /// <param name="token"></param>
         public DeserializeAccessTokenContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request,
             string token)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request)
+        {
             AccessToken = token;
         }
-
-        /// <summary>
-        /// Gets the authorization or token request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets or sets the authentication ticket.
-        /// </summary>
-        public AuthenticationTicket Ticket { get; set; }
 
         /// <summary>
         /// Gets or sets the validation parameters used to verify the authenticity of access tokens.

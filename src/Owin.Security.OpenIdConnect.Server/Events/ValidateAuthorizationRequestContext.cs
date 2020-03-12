@@ -5,81 +5,83 @@
  */
 
 using System;
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when validating an authorization request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ValidateAuthorizationRequest"/> event.
     /// </summary>
-    public class ValidateAuthorizationRequestContext : BaseValidatingContext {
+    public class ValidateAuthorizationRequestContext : BaseValidatingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ValidateAuthorizationRequestContext"/> class.
+        /// Creates a new instance of the <see cref="ValidateAuthorizationRequestContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
         public ValidateAuthorizationRequestContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request)
+        {
+            RedirectUri = request.RedirectUri;
         }
 
         /// <summary>
-        /// Gets the authorization request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
-
-        /// <summary>
-        /// Gets the client identifier.
+        /// Gets the client_id specified by the client application.
         /// </summary>
         public string ClientId => Request.ClientId;
 
         /// <summary>
-        /// Gets the client redirect URI
+        /// Gets the redirect_uri specified by the client application.
+        /// If it's not provided by the client, it must be set by
+        /// the user code by calling <see cref="Validate(string)"/>.
         /// </summary>
-        public string RedirectUri {
-            get { return Request.RedirectUri; }
-            set { Request.RedirectUri = value; }
-        }
+        public string RedirectUri { get; private set; }
 
         /// <summary>
         /// Marks this context as validated by the application.
         /// IsValidated becomes true and HasError becomes false as a result of calling.
-        /// </summary>
-        /// <returns></returns>
-        public override bool Validate() {
-            if (string.IsNullOrEmpty(RedirectUri)) {
-                // Don't allow default validation when
-                // the redirect_uri is not provided.
-                return false;
+        /// </summary>>
+        public override void Validate()
+        {
+            // Don't allow default validation when the redirect_uri
+            // is not explicitly provided by the client application.
+            if (string.IsNullOrEmpty(Request.RedirectUri))
+            {
+                throw new InvalidOperationException(
+                    "The authorization request cannot be validated because no " +
+                    "redirect_uri was specified by the client application.");
             }
 
-            return base.Validate();
+            base.Validate();
         }
 
         /// <summary>
         /// Checks the redirect URI to determine whether it equals <see cref="RedirectUri"/>.
         /// </summary>
         /// <param name="address"></param>
-        /// <returns></returns>
-        public bool Validate(string address) {
-            if (string.IsNullOrEmpty(address)) {
+        public void Validate(string address)
+        {
+            if (string.IsNullOrEmpty(address))
+            {
                 throw new ArgumentException("The redirect_uri cannot be null or empty.", nameof(address));
             }
 
-            if (!string.IsNullOrEmpty(RedirectUri) &&
-                !string.Equals(RedirectUri, address, StringComparison.Ordinal)) {
-                // Don't allow validation to alter the redirect_uri
-                // parameter extracted from the request.
-                return false;
+            // Don't allow validation to alter the redirect_uri parameter extracted
+            // from the request if the address was explicitly provided by the client.
+            if (!string.IsNullOrEmpty(Request.RedirectUri) &&
+                !string.Equals(Request.RedirectUri, address, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "The authorization request cannot be validated because a different " +
+                    "redirect_uri was specified by the client application.");
             }
 
             RedirectUri = address;
 
-            return Validate();
+            base.Validate();
         }
     }
 }

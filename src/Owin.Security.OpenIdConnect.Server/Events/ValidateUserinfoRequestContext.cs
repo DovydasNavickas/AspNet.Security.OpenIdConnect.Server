@@ -4,32 +4,27 @@
  * for more information concerning the license and the contributors participating to this project.
  */
 
+using AspNet.Security.OpenIdConnect.Primitives;
 using Microsoft.Owin;
-using Owin.Security.OpenIdConnect.Extensions;
 
-namespace Owin.Security.OpenIdConnect.Server {
+namespace Owin.Security.OpenIdConnect.Server
+{
     /// <summary>
-    /// Provides context information used when validating a userinfo request.
+    /// Represents the context class associated with the
+    /// <see cref="OpenIdConnectServerProvider.ValidateUserinfoRequest"/> event.
     /// </summary>
-    public class ValidateUserinfoRequestContext : BaseValidatingContext {
+    public class ValidateUserinfoRequestContext : BaseValidatingContext
+    {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ValidateUserinfoRequestContext"/> class.
+        /// Creates a new instance of the <see cref="ValidateUserinfoRequestContext"/> class.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="options"></param>
-        /// <param name="request"></param>
         public ValidateUserinfoRequestContext(
             IOwinContext context,
             OpenIdConnectServerOptions options,
             OpenIdConnectRequest request)
-            : base(context, options) {
-            Request = request;
+            : base(context, options, request)
+        {
             Validate();
         }
-
-        /// <summary>
-        /// Gets the userinfo request.
-        /// </summary>
-        public new OpenIdConnectRequest Request { get; }
     }
 }
